@@ -1,8 +1,8 @@
 # Bundled artifact (`.vsix` prerequisite)
 
-Generated: 2026-10-30T04:22:36.420Z
+Generated: 2026-10-30T06:34:11.897Z
 
-Bundle: 413.4 KB · self-contained · loads with a stubbed host
+Bundle: 413.8 KB · self-contained · loads with a stubbed host
 
 ```
 PASS  the bundle exists (run npm run build:bundle first)

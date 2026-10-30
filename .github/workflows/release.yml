@@ -1,74 +1,154 @@
 name: Release
 
-# Every push to main builds a fresh .vsix and publishes it as a release, so the
-# installable artifact always matches the code that was just merged.
+# Publishes a GitHub release ONLY when the version in extension/package.json has
+# changed (no tag `vX.Y.Z` exists yet). A normal push that does not bump the
+# version builds and tests but publishes nothing.
+#
+# To cut a release: `npm run version:bump patch` (or minor/major), commit, push.
+
 on:
   push:
     branches: [main]
-    tags: ['v*']
+    paths:
+      - 'extension/package.json'
+      - 'package.json'
+      - 'shared/**'
+      - 'bridge/**'
+      - 'extension/**'
+      - '.github/workflows/release.yml'
   workflow_dispatch:
+    inputs:
+      force:
+        description: 'Re-release the current version even if the tag exists'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  vsix:
-    name: Build and publish the .vsix
+  # ---------------------------------------------------------------- version
+  version:
+    name: Read the version and decide
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      tag: ${{ steps.read.outputs.tag }}
+      changed: ${{ steps.read.outputs.changed }}
+      notes: ${{ steps.read.outputs.notes }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # tags are needed to know what is already released
 
+      - name: Read version and check for an existing tag
+        id: read
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "require('./extension/package.json').version")
+          MANIFEST_VERSION=$(node -p "require('./package.json').version")
+          if [ "$VERSION" != "$MANIFEST_VERSION" ]; then
+            echo "::warning::root package.json is $MANIFEST_VERSION but the extension is $VERSION — using $VERSION"
+          fi
+          TAG="v$VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Tag $TAG already exists — nothing to release."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "New version $VERSION — releasing."
+          fi
+          {
+            echo "notes<<NOTES_EOF"
+            echo "Automated release of **$VERSION** from \`${GITHUB_SHA::7}\`."
+            echo ""
+            echo "Install:"
+            echo ""
+            echo '```bash'
+            echo "code --install-extension ai-bridge-$VERSION.vsix"
+            echo '```'
+            echo ""
+            echo "See the [README](https://github.com/${{ github.repository }}#readme) for setup, and the"
+            echo "[honest status section](https://github.com/${{ github.repository }}#what-is-actually-proven) for what is and is not proven."
+            echo "NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Note the decision
+        run: |
+          echo "### Release decision" >> "$GITHUB_STEP_SUMMARY"
+          echo "- version: \`${{ steps.read.outputs.version }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- changed: \`${{ steps.read.outputs.changed }}\`" >> "$GITHUB_STEP_SUMMARY"
+
+  # ------------------------------------------------------------------ verify
+  verify:
+    name: Build and test
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Compile TypeScript
-        run: npm run build
-
-      - name: Bundle the extension (self-contained dist)
-        run: npm run build:bundle
-
-      - name: Verify the bundled artifact loads
-        run: node test/bundle.cjs
-
-      - name: Read the version
-        id: version
+      - run: npm ci
+      - name: Install Chromium
         run: |
-          VERSION=$(node -p "require('./extension/package.json').version")
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          sudo apt-get update
+          sudo apt-get install -y chromium-browser || sudo apt-get install -y chromium
+          echo "CHROME_BIN=$(command -v chromium || command -v chromium-browser)" >> "$GITHUB_ENV"
+      - name: Contract tests
+        run: npm run build && node test/contract.cjs
+      - name: Full suite
+        run: npm run test:all
 
-      - name: Package the .vsix
-        run: |
-          cd extension
-          npx --yes @vscode/vsce package --no-dependencies --allow-missing-repository \
-            --out "../ai-bridge-${{ steps.version.outputs.version }}.vsix"
-
-      - name: Upload the .vsix as a build artifact
-        uses: actions/upload-artifact@v4
+  # ----------------------------------------------------------------- package
+  package:
+    name: Build the .vsix
+    needs: [version, verify]
+    if: needs.version.outputs.changed == 'true' || inputs.force == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          name: ai-bridge-${{ steps.version.outputs.version }}
-          path: ai-bridge-${{ steps.version.outputs.version }}.vsix
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - name: Compile and bundle
+        run: |
+          npm run build
+          npm run build:bundle
+      - name: Verify the bundle loads
+        run: node test/bundle.cjs
+      - name: Pack the vsix
+        run: node scripts/make-vsix.mjs
+      - name: Check what is inside
+        run: |
+          unzip -l "ai-bridge-${{ needs.version.outputs.version }}.vsix"
+          test -f "ai-bridge-${{ needs.version.outputs.version }}.vsix"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ai-bridge-${{ needs.version.outputs.version }}
+          path: ai-bridge-${{ needs.version.outputs.version }}.vsix
           if-no-files-found: error
-
-      - name: Publish / update the release
+      - name: Attach to a release
         uses: softprops/action-gh-release@v2
         with:
-          # A tag push owns its tag; a branch push updates a rolling release.
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || steps.version.outputs.tag }}
-          name: AI Bridge ${{ steps.version.outputs.version }}
-          body: |
-            Automated build from ${{ github.sha }}.
-
-            Install: download the `.vsix` and run
-            `code --install-extension ai-bridge-${{ steps.version.outputs.version }}.vsix`.
-          files: ai-bridge-${{ steps.version.outputs.version }}.vsix
+          tag_name: ${{ needs.version.outputs.tag }}
+          name: AI Bridge ${{ needs.version.outputs.version }}
+          body: ${{ needs.version.outputs.notes }}
+          files: ai-bridge-${{ needs.version.outputs.version }}.vsix
           fail_on_unmatched_files: true
           make_latest: true
+          # The tag is created at the commit that carries this version.
+          target_commitish: ${{ github.sha }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

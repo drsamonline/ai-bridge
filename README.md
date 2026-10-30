@@ -177,11 +177,26 @@ This is an experimental project and it would be dishonest to imply otherwise.
 ```bash
 npm install
 npm run build          # tsc across shared, bridge, extension
-npm run test:all       # 600 checks, 20 suites
+npm run test:all       # 619 checks, 21 suites
 npm run test:bench     # token-savings report
 npm run soak           # idle memory soak
 npm run package        # bundles and builds the .vsix
 ```
+
+## Releasing
+
+Releases are automatic and version-gated — pushing code alone publishes nothing.
+
+```bash
+npm run version:bump patch   # or minor / major, or an explicit 1.2.3
+git commit -am "release" && git push
+```
+
+The workflow reads the version, checks whether a `vX.Y.Z` tag exists, and only then builds, tests,
+packs the `.vsix`, tags the commit and publishes it as the latest release. A push that does not bump
+the version still runs the full suite, so a broken build is still caught.
+
+`docs/` deploys to GitHub Pages on any change to the landing page.
 
 Layout: `shared/` contracts and wire types · `bridge/` the CDP process, adapters, router ·
 `extension/` the VS Code side · `test/` fixtures and suites · `docs/` evidence and the landing page.

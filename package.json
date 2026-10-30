@@ -37,9 +37,11 @@
     "test:settings-ui": "node test/settings-panel.cjs",
     "test:smoke": "node test/extension-smoke.cjs",
     "test:panel": "node test/panel-virtual.cjs",
-    "test:all": "npm run build && npm run build:bundle && node test/compression-bench.cjs && node test/bundle.cjs && node test/contract.cjs && node test/custom-provider.cjs && node test/handshake.cjs && node test/chatgpt-fixture.cjs && node test/repo-edit.cjs && node test/state-t1.cjs && node test/state-boot.cjs && node test/state-guard.cjs && node test/rotation.cjs && node test/router.cjs && node test/models.cjs && node test/lowend.cjs && node test/compress-t0.cjs && node test/compress-t1.cjs && node test/settings-model.cjs && node test/settings-panel.cjs && node test/cdp-attach.cjs && node test/extension-smoke.cjs && node test/panel-virtual.cjs",
+    "test:all": "npm run build && npm run build:bundle && node test/release.cjs && node test/compression-bench.cjs && node test/bundle.cjs && node test/contract.cjs && node test/custom-provider.cjs && node test/handshake.cjs && node test/chatgpt-fixture.cjs && node test/repo-edit.cjs && node test/state-t1.cjs && node test/state-boot.cjs && node test/state-guard.cjs && node test/rotation.cjs && node test/router.cjs && node test/models.cjs && node test/lowend.cjs && node test/compress-t0.cjs && node test/compress-t1.cjs && node test/settings-model.cjs && node test/settings-panel.cjs && node test/cdp-attach.cjs && node test/extension-smoke.cjs && node test/panel-virtual.cjs",
     "soak": "node test/soak.cjs --minutes 10",
-    "package": "npm run build && npm run build:bundle && node scripts/make-vsix.mjs"
+    "package": "npm run build && npm run build:bundle && node scripts/make-vsix.mjs",
+    "test:release": "node test/release.cjs",
+    "version:bump": "node scripts/bump.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.14.10",
