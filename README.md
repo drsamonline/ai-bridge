@@ -62,7 +62,7 @@ code --install-extension ai-bridge-0.20.0.vsix
 **From source:**
 
 ```bash
-git clone https://github.com/sohilmomin/ai-bridge.git
+git clone https://github.com/drsamonline/ai-bridge.git
 cd ai-bridge
 npm install && npm run build && npm run package
 code --install-extension ai-bridge-0.20.0.vsix

@@ -1,7 +1,7 @@
 # Batch 4.1 — settings panel (UI evidence)
 
-Generated: 2026-10-30T04:18:14.295Z
-Panel HTML: 32453 bytes · six tabs · driven by the real SettingsController
+Generated: 2026-10-30T06:30:30.277Z
+Panel HTML: 32760 bytes · six tabs · driven by the real SettingsController
 
 ## Checks
 
