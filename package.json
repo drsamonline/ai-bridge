@@ -1,6 +1,6 @@
 {
   "name": "ai-bridge",
-  "version": "0.20.2",
+  "version": "0.20.3",
   "private": true,
   "description": "VS Code extension + local bridge that drives a logged-in web chat AI over CDP. Batches 0.1\u20137.1: bridge, CDP attach, RAM watchdog, three adapters, streaming panel, reviewable edits, project state, boot, guard, compression, settings, rotation, router, models, low-end mode.",
   "workspaces": [
@@ -14,6 +14,7 @@
   "scripts": {
     "build": "tsc -b shared bridge extension",
     "build:bundle": "cd extension && node esbuild.config.mjs",
+    "landing": "node scripts/build-landing.mjs",
     "clean": "rm -rf shared/dist bridge/dist extension/dist shared/*.tsbuildinfo bridge/*.tsbuildinfo extension/*.tsbuildinfo",
     "bridge": "node bridge/dist/main.js",
     "test": "node test/handshake.cjs",
