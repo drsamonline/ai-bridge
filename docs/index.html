@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AI Bridge — your browser's AI, inside VS Code</title>
+<meta name="description" content="Drive the ChatGPT, Claude or Gemini tab you are already signed in to, from inside VS Code. No API keys. No second subscription." />
+<meta property="og:title" content="AI Bridge" />
+<meta property="og:description" content="Your browser's AI, inside VS Code. No API key, no second subscription." />
+<meta property="og:image" content="screenshots/chat-panel.png" />
+<link rel="icon" href="../extension/media/icon.png" />
+<style>
+  :root {
+    --ink: #070a0e;
+    --panel: #0d1117;
+    --line: #1c2430;
+    --text: #e6edf3;
+    --dim: #8b949e;
+    --amber: #f0a500;
+    --cyan: #58a6ff;
+    --green: #238636;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--ink); color: var(--text);
+    font-family: var(--sans); font-size: 17px; line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--cyan); text-decoration: none; }
+  a:hover { text-decoration: underline; text-underline-offset: 3px; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 28px; }
+
+  /* ---------- top bar ---------- */
+  header {
+    position: sticky; top: 0; z-index: 20;
+    backdrop-filter: blur(12px); background: rgba(7,10,14,.78);
+    border-bottom: 1px solid var(--line);
+  }
+  header .wrap { display: flex; align-items: center; gap: 14px; height: 62px; }
+  header img { width: 26px; height: 26px; border-radius: 6px; }
+  header .name { font-weight: 650; letter-spacing: -.01em; }
+  header nav { margin-left: auto; display: flex; gap: 22px; font-size: 14px; }
+  header nav a { color: var(--dim); }
+  header nav a:hover { color: var(--text); text-decoration: none; }
+  @media (max-width: 720px) { header nav { display: none; } }
+
+  /* ---------- hero ---------- */
+  .hero { position: relative; overflow: hidden; padding: 96px 0 72px; }
+  .hero::before {
+    content: ""; position: absolute; inset: -40% 20% auto -10%; height: 620px;
+    background: radial-gradient(closest-side, rgba(240,165,0,.14), transparent 70%);
+    filter: blur(8px); pointer-events: none;
+  }
+  .hero::after {
+    content: ""; position: absolute; inset: -30% -20% auto 45%; height: 560px;
+    background: radial-gradient(closest-side, rgba(88,166,255,.13), transparent 70%);
+    pointer-events: none;
+  }
+  .kicker {
+    font-family: var(--mono); font-size: 12.5px; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--amber); margin: 0 0 18px;
+  }
+  h1 {
+    font-size: clamp(40px, 6.4vw, 74px); line-height: 1.02; letter-spacing: -.035em;
+    margin: 0 0 22px; font-weight: 700; max-width: 17ch;
+  }
+  h1 em { font-style: normal; color: var(--amber); }
+  .lede { font-size: clamp(17px, 2vw, 21px); color: var(--dim); max-width: 58ch; margin: 0 0 34px; }
+  .lede strong { color: var(--text); font-weight: 600; }
+
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 9px; padding: 13px 20px; border-radius: 10px;
+    font-weight: 600; font-size: 15px; border: 1px solid transparent; cursor: pointer;
+  }
+  .btn.primary { background: var(--amber); color: #12161c; }
+  .btn.primary:hover { filter: brightness(1.07); text-decoration: none; }
+  .btn.ghost { border-color: var(--line); color: var(--text); background: #11161d; }
+  .btn.ghost:hover { border-color: #2b3646; text-decoration: none; }
+  .meta { font-family: var(--mono); font-size: 12.5px; color: #6e7781; margin-top: 22px; }
+  .meta b { color: var(--dim); font-weight: 500; }
+
+  /* ---------- claim strip ---------- */
+  .claims { border-block: 1px solid var(--line); background: #090d12; }
+  .claims .wrap { display: grid; grid-template-columns: repeat(4, 1fr); }
+  .claim { padding: 26px 22px; border-left: 1px solid var(--line); }
+  .claim:first-child { border-left: 0; padding-left: 0; }
+  .claim h3 { margin: 0 0 6px; font-size: 15px; letter-spacing: -.01em; }
+  .claim p { margin: 0; font-size: 13.5px; color: var(--dim); line-height: 1.5; }
+  @media (max-width: 860px) {
+    .claims .wrap { grid-template-columns: 1fr 1fr; }
+    .claim:nth-child(3) { border-left: 0; padding-left: 0; }
+  }
+
+  /* ---------- sections ---------- */
+  section { padding: 84px 0; }
+  h2 { font-size: clamp(26px, 3.4vw, 36px); letter-spacing: -.025em; margin: 0 0 14px; }
+  .sub { color: var(--dim); max-width: 62ch; margin: 0 0 40px; }
+
+  figure { margin: 0; }
+  .shot {
+    border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+    background: var(--panel); box-shadow: 0 30px 70px -40px rgba(0,0,0,.9);
+  }
+  .shot img { display: block; width: 100%; height: auto; }
+  figcaption { font-family: var(--mono); font-size: 12.5px; color: #6e7781; margin-top: 12px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  @media (max-width: 860px) { .grid2 { grid-template-columns: 1fr; } }
+
+  /* ---------- flow diagram ---------- */
+  .flow { display: grid; gap: 10px; font-family: var(--mono); font-size: 13px; }
+  .flow .row {
+    display: grid; grid-template-columns: 150px 1fr; gap: 18px; align-items: center;
+    padding: 16px 18px; border: 1px solid var(--line); border-radius: 11px; background: #0b1016;
+  }
+  .flow .tag { color: var(--amber); font-weight: 600; }
+  .flow .tag.c { color: var(--cyan); }
+  .flow .tag.g { color: #3fb950; }
+  .flow span { color: var(--dim); }
+
+  /* ---------- table ---------- */
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+  th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line); }
+  th { font-family: var(--mono); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: #6e7781; font-weight: 500; }
+  td.n { font-family: var(--mono); }
+  .bar { display: inline-block; height: 7px; border-radius: 4px; background: var(--green); vertical-align: middle; }
+  .pct { font-family: var(--mono); color: var(--green); }
+
+  /* ---------- honesty ---------- */
+  .honest { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 860px) { .honest { grid-template-columns: 1fr; } }
+  .card { border: 1px solid var(--line); border-radius: 13px; padding: 24px; background: #0b1016; }
+  .card h3 { margin: 0 0 14px; font-size: 15px; letter-spacing: .04em; text-transform: uppercase; font-family: var(--mono); }
+  .card.yes h3 { color: #3fb950; }
+  .card.no h3 { color: var(--amber); }
+  .card ul { margin: 0; padding-left: 18px; }
+  .card li { margin: 7px 0; color: var(--dim); font-size: 14.5px; }
+  .card li b { color: var(--text); font-weight: 600; }
+
+  /* ---------- install ---------- */
+  .install { border: 1px solid var(--line); border-radius: 13px; overflow: hidden; background: #0b1016; }
+  .install .head {
+    display: flex; align-items: center; gap: 10px; padding: 11px 16px;
+    border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 12px; color: #6e7781;
+  }
+  .install .head .dot { width: 9px; height: 9px; border-radius: 50%; background: #2b3646; }
+  .install pre {
+    margin: 0; padding: 18px; font-family: var(--mono); font-size: 13.5px; color: #c9d1d9;
+    overflow-x: auto; line-height: 1.75;
+  }
+  .install pre .p { color: var(--green); }
+  .install pre .c { color: #6e7781; }
+  .copy {
+    margin-left: auto; background: none; border: 1px solid var(--line); color: var(--dim);
+    font-family: var(--mono); font-size: 11.5px; padding: 4px 10px; border-radius: 6px; cursor: pointer;
+  }
+  .copy:hover { color: var(--text); border-color: #2b3646; }
+
+  footer { border-top: 1px solid var(--line); padding: 40px 0 60px; color: #6e7781; font-size: 13.5px; }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; justify-content: space-between; }
+  footer nav { display: flex; gap: 18px; }
+  footer a { color: var(--dim); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <img src="../extension/media/icon.png" alt="" />
+    <span class="name">AI Bridge</span>
+    <nav>
+      <a href="#how">How it works</a>
+      <a href="#tokens">Tokens</a>
+      <a href="#proven">What's proven</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/sohilmomin/ai-bridge">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="wrap">
+    <p class="kicker">VS Code extension · experimental</p>
+    <h1>Your browser's AI, <em>inside</em> VS Code.</h1>
+    <p class="lede">
+      You are already signed in to ChatGPT. You already pay for it. AI Bridge attaches to that tab and
+      drives it from your editor — <strong>no API key, no second subscription, no new bill</strong>.
+      It never launches a browser; it uses the one you opened.
+    </p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/sohilmomin/ai-bridge/releases/latest">Download the .vsix</a>
+      <a class="btn ghost" href="https://github.com/sohilmomin/ai-bridge">Read the source</a>
+    </div>
+    <p class="meta">
+      <b>600</b> checks · <b>20</b> suites · <b>3</b> providers + your own ·
+      <b>≤500 MB</b> browser budget
+    </p>
+  </div>
+</div>
+
+<div class="claims">
+  <div class="wrap">
+    <div class="claim">
+      <h3>No API keys</h3>
+      <p>Nothing to paste, nothing to leak, nothing to bill.</p>
+    </div>
+    <div class="claim">
+      <h3>Your session</h3>
+      <p>The model you already chose, on the plan you already pay for.</p>
+    </div>
+    <div class="claim">
+      <h3>Edits you can refuse</h3>
+      <p>Every change is a proposal. Untick a hunk, accept the rest, one undo.</p>
+    </div>
+    <div class="claim">
+      <h3>Survives the limit</h3>
+      <p>Hit a cap and the context walks to Claude or Gemini by itself.</p>
+    </div>
+  </div>
+</div>
+
+<section id="how">
+  <div class="wrap">
+    <h2>It drives a tab, not an API</h2>
+    <p class="sub">
+      A small Node process on loopback holds the browser connection. The extension owns everything
+      that touches your files. Nothing leaves your machine except the prompts you send.
+    </p>
+
+    <figure class="shot" style="margin-bottom:26px">
+      <img src="screenshots/chat-panel.png" alt="The chat panel showing a streamed answer and a proposal card with per-hunk checkboxes" />
+    </figure>
+    <figcaption>Chat panel — streamed answer, then a proposal you accept hunk by hunk</figcaption>
+
+    <div class="flow" style="margin-top:44px">
+      <div class="row"><span class="tag">VS Code</span><span>panel · diff · state · settings · commands — everything that touches your workspace</span></div>
+      <div class="row"><span class="tag c">Bridge</span><span>loopback WebSocket · adapters · router · RAM watchdog · the CDP connection</span></div>
+      <div class="row"><span class="tag g">Browser tab</span><span>the ChatGPT / Claude / Gemini page you are signed in to — untouched, just driven</span></div>
+    </div>
+
+    <div class="grid2" style="margin-top:44px">
+      <figure>
+        <div class="shot"><img src="screenshots/settings-providers.png" alt="Providers tab with health dots and the model list" /></div>
+        <figcaption>Providers — health dots, models, and any provider you configure</figcaption>
+      </figure>
+      <figure>
+        <div class="shot"><img src="screenshots/settings-router.png" alt="Router tab with strategy, backoff and the failover chain preview" /></div>
+        <figcaption>Router — priority, cooldowns, and the chain it would try</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section id="tokens" style="background:#090d12;border-block:1px solid var(--line)">
+  <div class="wrap">
+    <h2>What it does about tokens</h2>
+    <p class="sub">
+      Measured with the project's own counter, on realistic inputs. Savings that break the prompt
+      are not savings — identifiers, numbers, negations and code fences are checked to survive.
+    </p>
+    <table>
+      <thead><tr><th>Input</th><th>Tokens</th><th>Saved</th><th></th></tr></thead>
+      <tbody>
+        <tr><td>Polite one-liner</td><td class="n">34 → 21</td><td class="pct">38%</td><td><span class="bar" style="width:38%"></span></td></tr>
+        <tr><td>Terse one-liner</td><td class="n">8 → 8</td><td class="pct">0%</td><td><span class="bar" style="width:2%;background:#30363d"></span></td></tr>
+        <tr><td>Verbose spec paragraph</td><td class="n">113 → 80</td><td class="pct">29%</td><td><span class="bar" style="width:29%"></span></td></tr>
+        <tr><td>Pasted stack trace</td><td class="n">83 → 71</td><td class="pct">14%</td><td><span class="bar" style="width:14%"></span></td></tr>
+        <tr><td>Code request</td><td class="n">68 → 59</td><td class="pct">13%</td><td><span class="bar" style="width:13%"></span></td></tr>
+        <tr><td>Boot prompt</td><td class="n">975 → 974</td><td class="pct">0%</td><td><span class="bar" style="width:2%;background:#30363d"></span></td></tr>
+        <tr><td>Repo bundle</td><td class="n">588 → 370</td><td class="pct">37%</td><td><span class="bar" style="width:37%"></span></td></tr>
+      </tbody>
+    </table>
+    <p class="sub" style="margin-top:26px">
+      Compression is noise on a terse prompt and a real 20–40% on verbose text and repo context. The
+      bigger lever is <b>not sending context the question doesn't need</b> — a bundle costs 500–900
+      tokens, and it is only attached when you name a file, a symbol or a code term.
+    </p>
+  </div>
+</section>
+
+<section id="proven">
+  <div class="wrap">
+    <h2>What is proven, and what isn't</h2>
+    <p class="sub">
+      This is experimental software. The list on the right matters more than the list on the left.
+    </p>
+    <div class="honest">
+      <div class="card yes">
+        <h3>Proven</h3>
+        <ul>
+          <li><b>600 checks, 20 suites</b>, on every push</li>
+          <li>Three adapters and a fourth custom one, end to end against fixtures</li>
+          <li>Per-hunk edits, locked-decision guard, drift refusal, one-undo applies</li>
+          <li>Boot under 4k with every delta present across five failovers</li>
+          <li>A deliberately broken fixture fails the suite — it detects breakage</li>
+          <li>The breakage report contains no chat content, checked against known fragments</li>
+        </ul>
+      </div>
+      <div class="card no">
+        <h3>Not proven</h3>
+        <ul>
+          <li><b>Live selectors</b> — no adapter has run against the real sites</li>
+          <li><b>The one-hour memory soak</b> — three minutes passes flat, an hour needs hardware</li>
+          <li><b>T1 / T2 quality</b> — built and guarded, never run against a real model</li>
+          <li><b>Windows</b> — the code exists, only Linux has been exercised</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="install" style="background:#090d12;border-block:1px solid var(--line)">
+  <div class="wrap">
+    <h2>Install</h2>
+    <p class="sub">Two commands, then attach the browser you are already signed in to.</p>
+    <div class="install">
+      <div class="head">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span style="margin-left:8px">terminal</span>
+        <button class="copy" onclick="navigator.clipboard.writeText(document.getElementById('cmd').innerText)">copy</button>
+      </div>
+      <pre id="cmd"><span class="c"># install the extension</span>
+<span class="p">$</span> code --install-extension ai-bridge-0.20.0.vsix
+
+<span class="c"># open your browser with the debug port on (close it first)</span>
+<span class="p">$</span> chrome --remote-debugging-port=9222
+
+<span class="c"># then, in VS Code</span>
+<span class="p">Ctrl+Shift+P</span>  →  AI Bridge: Attach Browser</pre>
+    </div>
+    <p class="sub" style="margin-top:26px">
+      If the health dot is red, the site changed its page. Press
+      <b>AI Bridge: Export Breakage Report</b> — it carries the host, the selectors tried and the
+      tag/attribute names, and never a word of your conversation.
+    </p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>PolyForm Noncommercial 1.0.0 · built by Dr Sohil Momin</span>
+    <nav>
+      <a href="https://github.com/sohilmomin/ai-bridge">Source</a>
+      <a href="https://github.com/sohilmomin/ai-bridge/releases">Releases</a>
+      <a href="https://github.com/sohilmomin/ai-bridge/blob/main/LICENSE">Licence</a>
+    </nav>
+  </div>
+</footer>
+
+</body>
+</html>

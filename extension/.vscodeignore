@@ -1,0 +1,7 @@
+# Only the built extension and its assets ship inside the .vsix.
+src/**
+node_modules/**
+**/*.map
+**/*.ts
+!dist/extension.js
+media/**

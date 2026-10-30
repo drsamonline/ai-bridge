@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>ChatGPT</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 0; background: #212121; color: #ececec; }
+      main { max-width: 760px; margin: 0 auto; padding: 16px; }
+      article { padding: 12px 0; border-bottom: 1px solid #333; }
+      .markdown p { margin: 0 0 8px; }
+      form { position: sticky; bottom: 0; display: flex; gap: 8px; padding: 12px 0; background: #212121; }
+      [contenteditable="true"] { flex: 1; min-height: 44px; min-width: 200px; padding: 10px; background: #303030; border-radius: 12px; outline: none; }
+      button { background: #303030; color: #ececec; border: 0; border-radius: 8px; padding: 8px 12px; }
+      #limit-banner { display: none; background: #4a1d1d; padding: 12px; border-radius: 8px; margin-bottom: 12px; }
+    </style>
+  </head>
+  <body>
+    <!--
+      DOM contract fixture for the ChatGPT adapter. Mirrors the structure the
+      adapter's selector chain targets: composer, send/stop buttons, assistant
+      turns with a .markdown body, the copy-turn sentinel, the .result-streaming
+      flag and the usage-limit banner.
+
+      Query flags used by the contract tests:
+        variant=no-primary-send  send button carries no data-testid (fallback path)
+        variant=no-composer-id   composer has no #prompt-textarea id (fallback path)
+        variant=limit            shows a usage-cap banner
+        variant=no-copy          never renders the copy sentinel
+        variant=stuck            never clears .result-streaming (debounce path)
+        variant=boot             plays the model's role for the boot round trip:
+                                 restates the DOING/TODO bullets it was given
+        variant=boot-bad         answers the boot without restating anything
+        delay=<ms>               delay before the first token (default 400)
+        tokens=<n>               number of streamed tokens (default 24)
+        tokenMs=<ms>             gap between tokens (default 45)
+    -->
+    <main>
+      <div id="limit-banner" role="alert">
+        You've reached the current usage cap for GPT-4. Try again in 5 minutes.
+      </div>
+      <div id="conversation"></div>
+      <form id="composer-form">
+        <div
+          id="prompt-textarea"
+          contenteditable="true"
+          role="textbox"
+          aria-label="Message ChatGPT"
+          data-placeholder="Ask anything"
+        ></div>
+        <button type="button" id="stop-button" data-testid="stop-button" aria-label="Stop streaming" style="display: none">
+          Stop
+        </button>
+        <button type="button" id="send-button" data-testid="send-button" aria-label="Send prompt" disabled>
+          Send
+        </button>
+      </form>
+    </main>
+
+    <script>
+      const params = new URLSearchParams(location.search);
+      const variant = params.get('variant') || '';
+      const delay = Number(params.get('delay') || 400);
+      const tokenCount = Number(params.get('tokens') || 24);
+      const tokenMs = Number(params.get('tokenMs') || 45);
+
+      const conversation = document.getElementById('conversation');
+      const composer = document.getElementById('prompt-textarea');
+      const sendBtn = document.getElementById('send-button');
+      const stopBtn = document.getElementById('stop-button');
+      const banner = document.getElementById('limit-banner');
+
+      if (variant === 'limit') banner.style.display = 'block';
+
+      if (variant === 'no-primary-send') {
+        sendBtn.removeAttribute('data-testid');
+      }
+      if (variant === 'no-composer-id') {
+        composer.removeAttribute('id');
+        composer.className = 'ProseMirror';
+      }
+
+      let streaming = false;
+
+      composer.addEventListener('input', () => {
+        sendBtn.disabled = composer.innerText.trim().length === 0 || streaming;
+      });
+
+      const WORDS = 'The quick brown fox jumps over the lazy dog while the bridge observes the DOM for settled text'.split(' ');
+      let pendingReply = null;
+
+      /**
+       * Stand-in for the model when the boot prompt is being tested: it restates
+       * the DOING/TODO bullets it was handed, which is exactly the behaviour
+       * batch 2.2's acceptance criterion asks a fresh chat to demonstrate.
+       */
+      function bootReply(text) {
+        if (variant === 'boot-bad') {
+          return 'Sure, let us start fresh. I do not know what we were working on before.';
+        }
+        const section = (name) => {
+          const re = new RegExp('## ' + name + '[^\\n]*\\n([\\s\\S]*?)(?=\\n## |$)');
+          const m = text.match(re);
+          if (!m) return [];
+          return m[1]
+            .split('\n')
+            .filter((l) => /^\s*-\s+/.test(l))
+            .map((l) => l.replace(/^\s*-\s+/, '').replace(/\s+\[[^\]]*\]\s*$/, '').trim())
+            .filter(Boolean);
+        };
+        const doing = section('DOING');
+        const todo = section('TODO');
+        const lines = ['Restating the state I was given.', '', 'DOING:'];
+        if (doing.length === 0) lines.push('- nothing in flight');
+        for (const d of doing) lines.push('- ' + d);
+        lines.push('', 'TODO:');
+        if (todo.length === 0) lines.push('- nothing queued');
+        for (const t of todo) lines.push('- ' + t);
+        return lines.join('\n');
+      }
+
+      function turnFor(role, extra) {
+        const article = document.createElement('article');
+        article.setAttribute('data-testid', 'conversation-turn-' + (conversation.children.length + 1));
+        const inner = document.createElement('div');
+        inner.setAttribute('data-message-author-role', role);
+        if (extra) inner.className = extra;
+        article.appendChild(inner);
+        conversation.appendChild(article);
+        return inner;
+      }
+
+      function respond() {
+        streaming = true;
+        sendBtn.disabled = true;
+        stopBtn.style.display = 'inline-block';
+
+        const inner = turnFor('assistant', 'agent-turn');
+        const md = document.createElement('div');
+        md.className = 'markdown result-streaming';
+        const p = document.createElement('p');
+        md.appendChild(p);
+        inner.appendChild(md);
+
+        const source = pendingReply ? pendingReply.split(' ') : WORDS;
+        const total = pendingReply ? source.length : tokenCount;
+        let i = 0;
+        const startAt = Date.now() + delay;
+
+        const tick = () => {
+          if (i >= total) {
+            if (variant !== 'stuck') {
+              md.classList.remove('result-streaming');
+              stopBtn.style.display = 'none';
+              if (variant !== 'no-copy') {
+                const copy = document.createElement('button');
+                copy.setAttribute('data-testid', 'copy-turn-action-button');
+                copy.setAttribute('aria-label', 'Copy');
+                copy.textContent = 'Copy';
+                inner.appendChild(copy);
+              }
+            }
+            streaming = false;
+            sendBtn.disabled = composer.innerText.trim().length === 0;
+            return;
+          }
+          const word = source[i % source.length];
+          p.textContent += (i === 0 ? '' : ' ') + word + (i === total - 1 ? '.' : '');
+          i += 1;
+          setTimeout(tick, tokenMs);
+        };
+
+        if (Date.now() < startAt) setTimeout(tick, startAt - Date.now());
+        else tick();
+      }
+
+      sendBtn.addEventListener('click', () => {
+        if (streaming) return;
+        const text = composer.innerText.trim();
+        if (!text) return;
+        const user = turnFor('user');
+        const p = document.createElement('p');
+        p.textContent = text;
+        user.appendChild(p);
+        composer.innerText = '';
+        sendBtn.disabled = true;
+        pendingReply = (variant === 'boot' || variant === 'boot-bad') ? bootReply(text) : null;
+        respond();
+      });
+
+      stopBtn.addEventListener('click', () => {
+        streaming = false;
+        stopBtn.style.display = 'none';
+        const md = document.querySelector('.markdown.result-streaming');
+        if (md) md.classList.remove('result-streaming');
+      });
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey && document.activeElement === composer) {
+          e.preventDefault();
+          sendBtn.click();
+        }
+      });
+    </script>
+  </body>
+</html>

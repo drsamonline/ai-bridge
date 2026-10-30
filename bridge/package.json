@@ -1,0 +1,21 @@
+{
+  "name": "@ai-bridge/bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local bridge: loopback WS server, lock file owner, CDP attach point (0.2).",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@ai-bridge/shared": "0.1.0",
+    "playwright-core": "^1.49.1",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "@types/ws": "^8.5.12",
+    "typescript": "^5.5.4"
+  }
+}

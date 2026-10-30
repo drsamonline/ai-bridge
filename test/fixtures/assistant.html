@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Assistant fixture</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 0; background: #1f1f1f; color: #eee; }
+      main { max-width: 720px; margin: 0 auto; padding: 16px; }
+      article, model-response { display: block; padding: 12px 0; border-bottom: 1px solid #333; }
+      form { position: sticky; bottom: 0; display: flex; gap: 8px; padding: 12px 0; background: #1f1f1f; }
+      [contenteditable="true"] { flex: 1; min-height: 44px; min-width: 200px; padding: 10px; background: #303030; border-radius: 12px; outline: none; }
+      button { background: #303030; color: #eee; border: 0; border-radius: 8px; padding: 8px 12px; }
+      .banner { display: none; background: #4a1d1d; padding: 12px; border-radius: 8px; margin-bottom: 12px; }
+    </style>
+  </head>
+  <body>
+    <!--
+      DOM-contract fixture for the Claude and Gemini adapters (batch 6.1).
+
+        ?flavor=claude | gemini   which provider's markup to render
+        ?variant=limit            show the usage-limit banner
+        ?variant=boot             restate the DOING/TODO bullets it is given
+        ?variant=boot-bad         answer the boot without restating
+        ?variant=no-copy          never render the copy sentinel
+        ?variant=stuck            never clear the streaming flag
+        ?delay=<ms> ?tokens=<n> ?tokenMs=<ms>
+
+      Same contract as test/fixtures/chatgpt.html, different selectors.
+    -->
+    <main>
+      <div id="banner" role="alert"></div>
+      <div id="conversation"></div>
+      <form id="composer-form"></form>
+    </main>
+
+    <script>
+      const params = new URLSearchParams(location.search);
+      const flavor = params.get('flavor') === 'gemini' ? 'gemini' : 'claude';
+      const variant = params.get('variant') || '';
+      const delay = Number(params.get('delay') || 300);
+      const tokenCount = Number(params.get('tokens') || 20);
+      const tokenMs = Number(params.get('tokenMs') || 45);
+
+      const conversation = document.getElementById('conversation');
+      const form = document.getElementById('composer-form');
+      const banner = document.getElementById('banner');
+
+      // --- provider-specific composer markup -------------------------------
+      let composer;
+      let sendBtn;
+      let stopBtn;
+
+      if (flavor === 'gemini') {
+        const rich = document.createElement('rich-textarea');
+        composer = document.createElement('div');
+        composer.className = 'ql-editor';
+        composer.setAttribute('contenteditable', 'true');
+        composer.setAttribute('aria-label', 'Enter a prompt here');
+        rich.appendChild(composer);
+
+        stopBtn = document.createElement('button');
+        stopBtn.type = 'button';
+        stopBtn.setAttribute('aria-label', 'Stop response');
+        stopBtn.textContent = 'Stop';
+        stopBtn.style.display = 'none';
+
+        sendBtn = document.createElement('button');
+        sendBtn.type = 'button';
+        sendBtn.className = 'send-button';
+        sendBtn.setAttribute('aria-label', 'Send message');
+        sendBtn.textContent = 'Send';
+
+        form.append(rich, stopBtn, sendBtn);
+      } else {
+        const fieldset = document.createElement('fieldset');
+        composer = document.createElement('div');
+        composer.className = 'ProseMirror';
+        composer.setAttribute('contenteditable', 'true');
+        composer.setAttribute('aria-label', 'Write your prompt to Claude');
+
+        stopBtn = document.createElement('button');
+        stopBtn.type = 'button';
+        stopBtn.setAttribute('aria-label', 'Stop Response');
+        stopBtn.textContent = 'Stop';
+        stopBtn.style.display = 'none';
+
+        sendBtn = document.createElement('button');
+        sendBtn.type = 'button';
+        sendBtn.setAttribute('aria-label', 'Send Message');
+        sendBtn.textContent = 'Send';
+
+        fieldset.append(composer, stopBtn, sendBtn);
+        form.appendChild(fieldset);
+      }
+
+      // --- model picker (batch 6.2) ---------------------------------------
+      const noPicker = variant === 'no-picker' || params.get('no-picker') === '1';
+      if (!noPicker) {
+        const picker = document.createElement('button');
+        picker.type = 'button';
+        picker.setAttribute('data-chat-model-picker', '');
+        picker.setAttribute('aria-label', 'Select model');
+        picker.textContent = 'Model';
+        const menu = document.createElement('div');
+        menu.setAttribute('role', 'menu');
+        menu.hidden = true;
+        picker.addEventListener('click', () => {
+          if (!menu.hidden) return;
+          const rows =
+            flavor === 'gemini'
+              ? [
+                  { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', free: 'false', current: true },
+                  { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', free: 'true', current: false },
+                ]
+              : [
+                  { id: 'claude-sonnet', label: 'Claude Sonnet 4.5', free: 'false', current: true },
+                  { id: 'claude-haiku', label: 'Claude Haiku', free: 'true', current: false },
+                ];
+          menu.innerHTML = '';
+          rows.forEach((r) => {
+            const item = document.createElement('div');
+            item.setAttribute('role', 'menuitemradio');
+            item.setAttribute('data-chat-model-id', r.id);
+            item.setAttribute('data-chat-model-free', r.free);
+            item.setAttribute('aria-checked', r.current ? 'true' : 'false');
+            item.textContent = r.label;
+            menu.appendChild(item);
+          });
+          menu.hidden = false;
+        });
+        form.appendChild(picker);
+        form.appendChild(menu);
+      }
+
+      if (variant === 'limit') {
+        banner.style.display = 'block';
+        if (flavor === 'gemini') {
+          banner.className = 'limit-reached';
+          banner.textContent = "You've reached your usage limit. Try again in 3 minutes or upgrade.";
+        } else {
+          banner.setAttribute('data-testid', 'limit-reached');
+          banner.textContent = "You've reached your limit for this conversation. Try again in 3 minutes.";
+        }
+      }
+
+      const WORDS = 'The quick brown fox jumps over the lazy dog while the adapter watches the DOM for settled text'.split(' ');
+      let streaming = false;
+      let pendingReply = null;
+
+      function bootReply(text) {
+        if (variant === 'boot-bad') return 'I do not know what we were doing before.';
+        const section = (name) => {
+          const re = new RegExp('## ' + name + '[^\\n]*\\n([\\s\\S]*?)(?=\\n## |$)');
+          const m = text.match(re);
+          if (!m) return [];
+          return m[1]
+            .split('\n')
+            .filter((l) => /^\s*-\s+/.test(l))
+            .map((l) => l.replace(/^\s*-\s+/, '').replace(/\s+\[[^\]]*\]\s*$/, '').trim())
+            .filter(Boolean);
+        };
+        const doing = section('DOING');
+        const todo = section('TODO');
+        const lines = ['Restating the state I was given.', '', 'DOING:'];
+        if (doing.length === 0) lines.push('- nothing in flight');
+        for (const d of doing) lines.push('- ' + d);
+        lines.push('', 'TODO:');
+        if (todo.length === 0) lines.push('- nothing queued');
+        for (const t of todo) lines.push('- ' + t);
+        const since = text.split('## Since the boot')[1];
+        if (since) {
+          lines.push('', 'SINCE:');
+          for (const l of since.split('\n')) if (l.trim()) lines.push(l.trim());
+        }
+        return lines.join('\n');
+      }
+
+      function makeTurn(role) {
+        let turn;
+        let body;
+        if (flavor === 'gemini') {
+          turn = document.createElement('model-response');
+          if (role === 'assistant') {
+            const wrap = document.createElement('div');
+            wrap.className = 'model-response-text';
+            body = document.createElement('div');
+            body.className = 'markdown';
+            const p = document.createElement('p');
+            body.appendChild(p);
+            wrap.appendChild(body);
+            turn.appendChild(wrap);
+            turn._body = p;
+            turn._flagTarget = turn;
+          } else {
+            const p = document.createElement('p');
+            p.textContent = role === 'user' ? '' : '';
+            turn.appendChild(p);
+            turn._body = p;
+            turn._flagTarget = turn;
+          }
+        } else {
+          turn = document.createElement('article');
+          const inner = document.createElement('div');
+          if (role === 'assistant') {
+            inner.setAttribute('data-testid', 'assistant-message');
+            const bodyWrap = document.createElement('div');
+            bodyWrap.className = 'font-claude-message';
+            const p = document.createElement('p');
+            bodyWrap.appendChild(p);
+            inner.appendChild(bodyWrap);
+            turn._body = p;
+            turn._flagTarget = inner;
+          } else {
+            const p = document.createElement('p');
+            inner.appendChild(p);
+            turn._body = p;
+            turn._flagTarget = inner;
+          }
+          turn.appendChild(inner);
+        }
+        conversation.appendChild(turn);
+        return turn;
+      }
+
+      function respond() {
+        streaming = true;
+        sendBtn.disabled = true;
+        stopBtn.style.display = 'inline-block';
+
+        const turn = makeTurn('assistant');
+        if (flavor === 'gemini') turn.classList.add('streaming');
+        else turn._flagTarget.setAttribute('data-is-streaming', 'true');
+
+        const source = pendingReply ? pendingReply.split(' ') : WORDS;
+        const total = pendingReply ? source.length : tokenCount;
+        let i = 0;
+        const startAt = Date.now() + delay;
+
+        const finish = () => {
+          if (variant !== 'stuck') {
+            if (flavor === 'gemini') turn.classList.remove('streaming');
+            else turn._flagTarget.removeAttribute('data-is-streaming');
+            stopBtn.style.display = 'none';
+            if (variant !== 'no-copy') {
+              const copy = document.createElement('button');
+              copy.setAttribute('aria-label', 'Copy');
+              if (flavor === 'gemini') {
+                copy.textContent = 'Copy';
+                const host = document.createElement('copy-button');
+                host.appendChild(copy);
+                turn.appendChild(host);
+              } else {
+                copy.setAttribute('data-testid', 'action-bar-copy');
+                copy.textContent = 'Copy';
+                turn.appendChild(copy);
+              }
+            }
+          }
+          streaming = false;
+          sendBtn.disabled = composer.innerText.trim().length === 0;
+        };
+
+        const tick = () => {
+          if (i >= total) {
+            finish();
+            return;
+          }
+          turn._body.textContent += (i === 0 ? '' : ' ') + source[i % source.length] + (i === total - 1 ? '.' : '');
+          i += 1;
+          setTimeout(tick, tokenMs);
+        };
+
+        if (Date.now() < startAt) setTimeout(tick, startAt - Date.now());
+        else tick();
+      }
+
+      // A form with no action would navigate on submit and wipe the page.
+      form.addEventListener('submit', (e) => e.preventDefault());
+
+      composer.addEventListener('input', () => {
+        sendBtn.disabled = composer.innerText.trim().length === 0 || streaming;
+      });
+
+      sendBtn.addEventListener('click', () => {
+        if (streaming) return;
+        const text = composer.innerText.trim();
+        if (!text) return;
+        const userTurn = makeTurn('user');
+        userTurn._body.textContent = text;
+        composer.innerText = '';
+        sendBtn.disabled = true;
+        pendingReply = variant === 'boot' || variant === 'boot-bad' ? bootReply(text) : null;
+        respond();
+      });
+
+      stopBtn.addEventListener('click', () => {
+        streaming = false;
+        stopBtn.style.display = 'none';
+        if (flavor === 'gemini') document.querySelectorAll('.streaming').forEach((n) => n.classList.remove('streaming'));
+        else document.querySelectorAll('[data-is-streaming]').forEach((n) => n.removeAttribute('data-is-streaming'));
+      });
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey && document.activeElement === composer) {
+          e.preventDefault();
+          sendBtn.click();
+        }
+      });
+    </script>
+  </body>
+</html>

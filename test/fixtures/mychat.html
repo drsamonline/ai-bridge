@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>My Chat</title>
+  <style>
+    body { font-family: system-ui; margin: 0; background: #101418; color: #e6edf3; }
+    main { max-width: 720px; margin: 0 auto; padding: 16px; }
+    .turn { padding: 10px 0; border-bottom: 1px solid #223; }
+    #ask { width: 100%; min-height: 60px; background: #182028; color: inherit; border: 0; border-radius: 8px; padding: 8px; }
+    #go { margin-top: 8px; padding: 8px 14px; }
+  </style></head>
+  <body>
+    <!--
+      A deliberately "unknown" provider: no ChatGPT/Claude/Gemini selectors at all.
+      Used by test/custom-provider.cjs to prove a configured provider works.
+    -->
+    <main>
+      <div id="log"></div>
+      <textarea id="ask" placeholder="Ask anything"></textarea>
+      <button id="go" type="button">Send</button>
+    </main>
+    <script>
+      const log = document.getElementById('log');
+      const ask = document.getElementById('ask');
+      const go = document.getElementById('go');
+      const WORDS = 'a custom provider answered this through the generic adapter'.split(' ');
+      go.addEventListener('click', () => {
+        const text = ask.value.trim();
+        if (!text) return;
+        const u = document.createElement('div');
+        u.className = 'turn user';
+        u.textContent = text;
+        log.appendChild(u);
+        ask.value = '';
+
+        const a = document.createElement('div');
+        a.className = 'turn assistant';
+        a.setAttribute('data-message-author-role', 'assistant');
+        const body = document.createElement('div');
+        body.className = 'markdown';
+        a.appendChild(body);
+        log.appendChild(a);
+        a.setAttribute('aria-busy', 'true');
+
+        let i = 0;
+        const tick = () => {
+          if (i >= WORDS.length) {
+            a.removeAttribute('aria-busy');
+            const copy = document.createElement('button');
+            copy.setAttribute('aria-label', 'Copy');
+            copy.textContent = 'Copy';
+            a.appendChild(copy);
+            return;
+          }
+          body.textContent += (i ? ' ' : '') + WORDS[i] + (i === WORDS.length - 1 ? '.' : '');
+          i += 1;
+          setTimeout(tick, 45);
+        };
+        setTimeout(tick, 200);
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  contract:
+    name: Contract + unit suites
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium (the CDP suites drive a real browser)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y chromium-browser || sudo apt-get install -y chromium
+          echo "CHROME_BIN=$(command -v chromium || command -v chromium-browser)" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: npm run build
+
+      - name: Contract tests (fake DOM fixtures)
+        run: node test/contract.cjs
+
+      - name: Full suite
+        run: npm run test:all
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: batch-evidence
+          path: docs/batch-*.md
+          if-no-files-found: warn

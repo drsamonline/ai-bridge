@@ -1,0 +1,522 @@
+{
+  "name": "ai-bridge-vscode",
+  "displayName": "AI Bridge",
+  "description": "Drive a logged-in web chat AI (ChatGPT, Claude, Gemini, or your own) from inside VS Code. No API keys: the extension talks to the browser tab you are already signed in to.",
+  "version": "0.20.0",
+  "publisher": "ai-bridge",
+  "private": true,
+  "license": "SEE LICENSE IN LICENSE",
+  "engines": {
+    "vscode": "^1.90.0",
+    "node": ">=20"
+  },
+  "categories": [
+    "AI",
+    "Chat",
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Batch 0.1 only starts the loopback bridge and logs the handshake. No repository reads or writes happen until batch 1.2 adds the Workspace Trust gate, at which point agents are disabled in untrusted workspaces."
+    },
+    "virtualWorkspaces": false
+  },
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "aiBridge.settings.open",
+        "title": "AI Bridge: Open Settings",
+        "category": "AI Bridge"
+      },
+      {
+        "command": "aiBridge.bridge.start",
+        "title": "AI Bridge: Start Bridge",
+        "category": "AI Bridge"
+      },
+      {
+        "command": "aiBridge.bridge.stop",
+        "title": "AI Bridge: Stop Bridge",
+        "category": "AI Bridge"
+      },
+      {
+        "command": "aiBridge.bridge.restart",
+        "title": "AI Bridge: Restart Bridge",
+        "category": "AI Bridge"
+      },
+      {
+        "command": "aiBridge.bridge.reconnect",
+        "title": "AI Bridge: Reconnect Handshake",
+        "category": "AI Bridge"
+      },
+      {
+        "command": "aiBridge.bridge.showLog",
+        "title": "AI Bridge: Show Output Log",
+        "category": "AI Bridge"
+      },
+      {
+        "command": "aiBridge.bridge.showLock",
+        "title": "AI Bridge: Inspect Lock File (redacted)",
+        "category": "AI Bridge"
+      },
+      {
+        "command": "aiBridge.bridge.diagnostics",
+        "title": "AI Bridge: Copy Diagnostics",
+        "category": "AI Bridge"
+      },
+      {
+        "command": "aiBridge.browser.attach",
+        "title": "AI Bridge: Attach Browser (CDP)",
+        "category": "AI Bridge"
+      },
+      {
+        "command": "aiBridge.browser.detach",
+        "title": "AI Bridge: Detach Browser",
+        "category": "AI Bridge"
+      },
+      {
+        "command": "aiBridge.browser.status",
+        "title": "AI Bridge: Browser Status",
+        "category": "AI Bridge"
+      },
+      {
+        "command": "aiBridge.browser.recycle",
+        "title": "AI Bridge: Recycle Active Tab",
+        "category": "AI Bridge"
+      },
+      {
+        "command": "aiBridge.browser.gc",
+        "title": "AI Bridge: Collect Garbage",
+        "category": "AI Bridge"
+      },
+      {
+        "command": "aiBridge.chat.open",
+        "title": "AI Bridge: Open Chat Panel",
+        "category": "AI Bridge"
+      },
+      {
+        "command": "aiBridge.chat.send",
+        "title": "AI Bridge: Send Prompt",
+        "category": "AI Bridge"
+      },
+      {
+        "command": "aiBridge.chat.health",
+        "title": "AI Bridge: Adapter Health",
+        "category": "AI Bridge"
+      },
+      {
+        "command": "aiBridge.repo.attach",
+        "title": "AI Bridge: Index Workspace",
+        "category": "AI Bridge"
+      },
+      {
+        "command": "aiBridge.repo.context",
+        "title": "AI Bridge: Preview Repo Context",
+        "category": "AI Bridge"
+      },
+      {
+        "command": "aiBridge.repo.lock",
+        "title": "AI Bridge: Lock a Decision",
+        "category": "AI Bridge"
+      },
+      {
+        "command": "aiBridge.repo.decisions",
+        "title": "AI Bridge: Show Locked Decisions",
+        "category": "AI Bridge"
+      },
+      {
+        "command": "aiBridge.state.show",
+        "title": "AI Bridge: Show Project State",
+        "category": "AI Bridge"
+      },
+      {
+        "command": "aiBridge.state.snapshots",
+        "title": "AI Bridge: State Snapshots",
+        "category": "AI Bridge"
+      },
+      {
+        "command": "aiBridge.state.snapshot",
+        "title": "AI Bridge: Snapshot State Now",
+        "category": "AI Bridge"
+      },
+      {
+        "command": "aiBridge.state.clear",
+        "title": "AI Bridge: Clear Project State",
+        "category": "AI Bridge"
+      },
+      {
+        "command": "aiBridge.boot.preview",
+        "title": "AI Bridge: Preview Boot Prompt",
+        "category": "AI Bridge"
+      },
+      {
+        "command": "aiBridge.boot.inject",
+        "title": "AI Bridge: Inject Boot into a Fresh Chat",
+        "category": "AI Bridge"
+      },
+      {
+        "command": "aiBridge.state.rescan",
+        "title": "AI Bridge: Rescan Workspace (T3)",
+        "category": "AI Bridge"
+      },
+      {
+        "command": "aiBridge.state.t2",
+        "title": "AI Bridge: Run T2 Summariser Now",
+        "category": "AI Bridge"
+      },
+      {
+        "command": "aiBridge.compress.preview",
+        "title": "AI Bridge: Preview T0 Compression",
+        "category": "AI Bridge"
+      },
+      {
+        "command": "aiBridge.compress.stats",
+        "title": "AI Bridge: Compression Stats",
+        "category": "AI Bridge"
+      },
+      {
+        "command": "aiBridge.compress.t1Status",
+        "title": "AI Bridge: T1 Status (gate + backend)",
+        "category": "AI Bridge"
+      },
+      {
+        "command": "aiBridge.rotation.rotate",
+        "title": "AI Bridge: Rotate Session Now",
+        "category": "AI Bridge"
+      },
+      {
+        "command": "aiBridge.rotation.status",
+        "title": "AI Bridge: Rotation Status",
+        "category": "AI Bridge"
+      },
+      {
+        "command": "aiBridge.diagnostics.report",
+        "title": "AI Bridge: Export Breakage Report",
+        "category": "AI Bridge"
+      }
+    ],
+    "configuration": {
+      "title": "AI Bridge",
+      "properties": {
+        "aiBridge.bridge.port": {
+          "type": "number",
+          "default": 47615,
+          "minimum": 1024,
+          "maximum": 65535,
+          "markdownDescription": "Loopback port for the local bridge. Bound to `127.0.0.1` only. The remaining \u00a74 settings groups (router, compressor, state, repo, performance) arrive with the Settings panel in batch 4.1."
+        },
+        "aiBridge.bridge.autostart": {
+          "type": "boolean",
+          "default": true,
+          "description": "Start the bridge process automatically when the extension activates."
+        },
+        "aiBridge.logLevel": {
+          "type": "string",
+          "enum": [
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ],
+          "default": "info",
+          "description": "Verbosity of the bridge process log piped into the AI Bridge output channel."
+        },
+        "aiBridge.browser.ports": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "default": [
+            9222,
+            9223
+          ],
+          "markdownDescription": "CDP debugging ports to probe, in order. The bridge **attaches** with `connectOverCDP` and never launches a browser \u2014 start Chrome/Edge yourself with `--remote-debugging-port=9222`."
+        },
+        "aiBridge.browser.autoAttach": {
+          "type": "boolean",
+          "default": true,
+          "description": "Attach to the browser automatically after the handshake succeeds."
+        },
+        "aiBridge.ramCap.browser": {
+          "type": "number",
+          "default": 500,
+          "minimum": 100,
+          "description": "Browser RAM cap in MB (spec \u00a72: \u2264 500). Measured as the resident set of the attached browser's whole process tree."
+        },
+        "aiBridge.ramCap.extension": {
+          "type": "number",
+          "default": 1024,
+          "minimum": 128,
+          "description": "Extension host RAM cap in MB (spec \u00a72: \u2264 1 GB). Shown in the status bar tooltip."
+        },
+        "aiBridge.watchdog.pollMs": {
+          "type": "number",
+          "default": 3000,
+          "minimum": 500,
+          "description": "RAM poll interval in ms (spec \u00a75.11: 3 s)."
+        },
+        "aiBridge.adapter.id": {
+          "type": "string",
+          "default": "chatgpt",
+          "enum": [
+            "chatgpt"
+          ],
+          "description": "Adapter used by the chat panel. Claude and Gemini join this list in batch 6.1."
+        },
+        "aiBridge.chat.debounceMs": {
+          "type": "number",
+          "default": 900,
+          "minimum": 600,
+          "maximum": 1500,
+          "description": "Quiet period before a response counts as settled (spec \u00a75.4: 600\u20131500 ms). The copy-button sentinel usually ends the wait sooner."
+        },
+        "aiBridge.chat.timeoutMs": {
+          "type": "number",
+          "default": 180000,
+          "minimum": 10000,
+          "description": "Hard timeout for one answer. On timeout the partial text is kept."
+        },
+        "aiBridge.repo.context": {
+          "type": "boolean",
+          "default": true,
+          "description": "Attach repo context (signatures + bodies within a token budget) to every prompt."
+        },
+        "aiBridge.repo.edits": {
+          "type": "boolean",
+          "default": true,
+          "description": "Parse edit blocks out of answers and offer them as a reviewable diff. Nothing is written until you accept."
+        },
+        "aiBridge.state.location": {
+          "type": "string",
+          "enum": [
+            "workspace",
+            "global"
+          ],
+          "default": "workspace",
+          "description": "Where `state.full.json.gz` lives. `workspace` writes into `.ai-bridge/state` with a generated `.gitignore`; `global` keeps it under the home directory."
+        },
+        "aiBridge.state.encrypt": {
+          "type": "boolean",
+          "default": true,
+          "description": "Encrypt state with AES-256-GCM using a key held in SecretStorage. Off writes `state.full.json.gz`; on writes `state.full.json.gz.aes`."
+        },
+        "aiBridge.state.maxSnapshots": {
+          "type": "number",
+          "default": 10,
+          "minimum": 1,
+          "description": "Snapshots kept before the oldest are pruned."
+        },
+        "aiBridge.state.snapshotEvery": {
+          "type": "number",
+          "default": 10,
+          "minimum": 0,
+          "description": "Take a snapshot every N turns (0 disables the interval; init and manual snapshots still happen)."
+        },
+        "aiBridge.state.autostart": {
+          "type": "boolean",
+          "default": true,
+          "description": "Start the state layer when the extension activates."
+        },
+        "aiBridge.t2.backend": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "ollama",
+            "tab",
+            "heuristic",
+            "off"
+          ],
+          "default": "auto",
+          "markdownDescription": "T2 summariser (\u00a75.5). `auto` probes Ollama on `t2.url`, then falls back to the offline heuristic extractor. `tab` uses a throwaway browser tab."
+        },
+        "aiBridge.t2.url": {
+          "type": "string",
+          "default": "http://127.0.0.1:11434",
+          "description": "Ollama endpoint for T2."
+        },
+        "aiBridge.t2.model": {
+          "type": "string",
+          "default": "llama3.2",
+          "description": "Ollama model used for T2."
+        },
+        "aiBridge.t2.every": {
+          "type": "number",
+          "default": 5,
+          "minimum": 0,
+          "description": "Run T2 every N turns (spec \u00a75.5: every 5). 0 disables the interval."
+        },
+        "aiBridge.compressor.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run T0 on every outgoing prompt. Code fences, inline code, paths, URLs, CONSTANTS and error lines are protected unconditionally."
+        },
+        "aiBridge.compressor.tier": {
+          "type": "string",
+          "enum": [
+            "T0",
+            "T1",
+            "auto"
+          ],
+          "default": "auto",
+          "markdownDescription": "`T0` is deterministic and free. `T1` adds an opt-in local model pass; `auto` uses T1 only when the memory gate allows it and a backend is reachable. T1 can never make a prompt worse: if it loses an identifier, damages a protected span or fails to shorten, T0 is used instead."
+        },
+        "aiBridge.compressor.budgetTokens": {
+          "type": "number",
+          "default": 4096,
+          "minimum": 128,
+          "description": "If T0 alone leaves the prompt above this, one harder pass runs (articles and connectives dropped). It never escalates twice."
+        },
+        "aiBridge.t1.mode": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "on",
+            "off"
+          ],
+          "default": "auto",
+          "markdownDescription": "\u00a75.6: T1 auto-offs below 8 GB of RAM. `on` forces it (the user's explicit opt-in); `off` disables it everywhere."
+        },
+        "aiBridge.t1.minRamGb": {
+          "type": "number",
+          "default": 8,
+          "minimum": 1,
+          "description": "RAM threshold for the automatic T1 gate, in GB."
+        },
+        "aiBridge.t1.backend": {
+          "type": "string",
+          "enum": [
+            "ollama",
+            "llamacpp"
+          ],
+          "default": "ollama",
+          "markdownDescription": "`ollama` talks to a local model over HTTP (external RAM). `llamacpp` uses `node-llama-cpp` in-process (50\u2013150 MB band) and needs `t1.modelPath`."
+        },
+        "aiBridge.t1.url": {
+          "type": "string",
+          "default": "http://127.0.0.1:11434",
+          "description": "Ollama endpoint for T1."
+        },
+        "aiBridge.t1.model": {
+          "type": "string",
+          "default": "llama3.2",
+          "description": "Ollama model used for T1."
+        },
+        "aiBridge.t1.modelPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to a .gguf model for the llama.cpp backend."
+        },
+        "aiBridge.t1.timeoutMs": {
+          "type": "number",
+          "default": 20000,
+          "minimum": 1000,
+          "description": "T1 must answer within this window or the prompt goes out with T0 only."
+        },
+        "aiBridge.rotation.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "On a detected provider limit, rotate to a fresh chat and carry the context across (spec \u00a75.1)."
+        },
+        "aiBridge.rotation.preview": {
+          "type": "string",
+          "enum": [
+            "always",
+            "on-failover",
+            "never"
+          ],
+          "default": "on-failover",
+          "description": "When to show the editable boot document before injecting."
+        },
+        "aiBridge.router.failover": {
+          "type": "boolean",
+          "default": true,
+          "description": "On a provider limit, move to the next provider in priority order and inject the boot so the context follows (\u00a75.9)."
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "aiBridge.container",
+          "title": "AI Bridge",
+          "icon": "media/chat.svg"
+        }
+      ]
+    },
+    "views": {
+      "aiBridge.container": [
+        {
+          "id": "aiBridge.chatView",
+          "name": "Chat",
+          "type": "webview",
+          "contextualTitle": "AI Bridge Chat"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "aiBridge.chat.open",
+        "key": "ctrl+alt+a",
+        "mac": "cmd+alt+a"
+      },
+      {
+        "command": "aiBridge.settings.open",
+        "key": "ctrl+alt+,",
+        "mac": "cmd+alt+,"
+      },
+      {
+        "command": "aiBridge.rotation.rotate",
+        "key": "ctrl+alt+r",
+        "mac": "cmd+alt+r"
+      },
+      {
+        "command": "aiBridge.state.show",
+        "key": "ctrl+alt+s",
+        "mac": "cmd+alt+s"
+      },
+      {
+        "command": "aiBridge.compress.preview",
+        "key": "ctrl+alt+c",
+        "mac": "cmd+alt+c"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "watch": "tsc -b --watch"
+  },
+  "dependencies": {
+    "@ai-bridge/shared": "0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "@types/vscode": "^1.90.0",
+    "@types/ws": "^8.5.12",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.5.4"
+  },
+  "icon": "media/icon.png",
+  "keywords": [
+    "ai",
+    "chatgpt",
+    "claude",
+    "gemini",
+    "copilot",
+    "agent",
+    "cdp",
+    "chrome",
+    "automation"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sohilmomin/ai-bridge.git"
+  },
+  "galleryBanner": {
+    "color": "#0d1117",
+    "theme": "dark"
+  }
+}
