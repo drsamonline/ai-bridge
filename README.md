@@ -7,7 +7,7 @@
 **Your browser's AI, inside VS Code. No API key, no second subscription.**
 
 [![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-0d1117?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.20.0-238636?style=flat-square)](extension/package.json)
+[![Version](https://img.shields.io/badge/version-0.20.1-238636?style=flat-square)](extension/package.json)
 [![Tests](https://img.shields.io/badge/tests-600%20passing-238636?style=flat-square)](#what-is-actually-proven)
 [![VS Code](https://img.shields.io/badge/VS%20Code-%5E1.90-58a6ff?style=flat-square)](https://code.visualstudio.com)
 [![Node](https://img.shields.io/badge/node-%E2%89%A520-58a6ff?style=flat-square)](https://nodejs.org)
@@ -56,7 +56,7 @@ It never launches a browser. It never asks for an API key. It uses the tab you o
 **From a build:**
 
 ```bash
-code --install-extension ai-bridge-0.20.0.vsix
+code --install-extension ai-bridge-0.20.1.vsix
 ```
 
 **From source:**
@@ -65,7 +65,7 @@ code --install-extension ai-bridge-0.20.0.vsix
 git clone https://github.com/drsamonline/ai-bridge.git
 cd ai-bridge
 npm install && npm run build && npm run package
-code --install-extension ai-bridge-0.20.0.vsix
+code --install-extension ai-bridge-0.20.1.vsix
 ```
 
 <br />
@@ -177,7 +177,7 @@ This is an experimental project and it would be dishonest to imply otherwise.
 ```bash
 npm install
 npm run build          # tsc across shared, bridge, extension
-npm run test:all       # 619 checks, 21 suites
+npm run test:all       # 623 checks, 21 suites
 npm run test:bench     # token-savings report
 npm run soak           # idle memory soak
 npm run package        # bundles and builds the .vsix

@@ -1,6 +1,6 @@
 # Batch 7.2 — contract tests + breakage report
 
-Generated: 2026-10-30T06:33:56.667Z
+Generated: 2026-10-30T09:12:39.310Z
 
 Acceptance: **CI green; report JSON has no chat content.**
 
@@ -55,7 +55,7 @@ Result: 31/31 passed.
 ```json
 {
   "schema": 1,
-  "when": "2026-10-30T06:33:56.420Z",
+  "when": "2026-10-30T09:12:38.999Z",
   "adapter": {
     "id": "claude",
     "host": "unknown",

@@ -1,6 +1,6 @@
 # Batch 2.2 — T2, T3, buildBoot()≤4k
 
-Generated: 2026-10-30T04:18:27.294Z
+Generated: 2026-10-30T09:12:55.133Z
 
 Acceptance: **New chat + boot → AI restates DOING/TODO correctly.**
 
@@ -102,6 +102,6 @@ Ack: ok=true · restated 3 · missing 0
 
 ## T2 / T3
 
-- T2: heuristic in 6 ms — {"doing":0,"todo":0,"done":0,"decisions":0,"files":0,"glossary":0}
+- T2: heuristic in 7 ms — {"doing":0,"todo":0,"done":0,"decisions":0,"files":0,"glossary":0}
 - T2 fallback on a broken backend: heuristic (fallback) (model went away)
 - T3: 2 files, dirtyHash 6f200d6443e43037; after an edit: src/api.ts → cec20b48d7e31da2

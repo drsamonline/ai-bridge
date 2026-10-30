@@ -1,6 +1,6 @@
 # Batch 3.2 — T1 compressor (opt-in local model)
 
-Generated: 2026-10-30T04:18:45.880Z
+Generated: 2026-10-30T09:09:06.216Z
 
 Acceptance: **Identifiers preserved; low-end stays T0.**
 
@@ -12,7 +12,11 @@ PASS  8 GB and above the gate permits T1
 PASS  the user can force T1 on against the gate
 PASS  the user can force T1 off on a big machine
 PASS  the threshold is configurable
-PASS  this low-end machine stays on T0 (the acceptance line)
+PASS  a 4 GB laptop stays on T0
+PASS  a 7 GB laptop stays on T0 (the acceptance line)
+PASS  8 GB exactly is the boundary and is allowed
+PASS  a 16 GB machine is allowed T1
+PASS  the gate agrees with the machine it is actually running on
 PASS  identifiers are extracted from prose, code and paths
 PASS  snake_case and CamelCase both count
 PASS  a declaration name is captured even without backticks
@@ -50,7 +54,7 @@ PASS  T2 goes through the same identifier guard as T1
 PASS  a T2 reply that loses identifiers falls back to T0
 ```
 
-Result: 41/41 passed.
+Result: 45/45 passed.
 
 ## The memory gate
 

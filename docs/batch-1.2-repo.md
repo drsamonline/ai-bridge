@@ -1,6 +1,6 @@
 # Batch 1.2 — RepoReader + EditApplier acceptance evidence
 
-Generated: 2026-10-30T04:18:42.655Z
+Generated: 2026-10-30T09:12:43.460Z
 Core modules run against a real temp repo through a `node:fs` port; no VS Code,
 no browser, no model. Every assertion is against bytes on disk.
 

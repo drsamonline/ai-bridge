@@ -1,6 +1,6 @@
 # Batch 7.1 — low-end mode + polish
 
-Generated: 2026-10-30T04:21:05.810Z
+Generated: 2026-10-30T09:11:32.141Z
 
 Acceptance: **8 GB laptop: 3s watchdog, GC button, low-end toggle works.**
 

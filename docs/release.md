@@ -1,6 +1,6 @@
 # Release machinery
 
-Generated: 2026-10-30T06:33:59.024Z
+Generated: 2026-10-30T09:12:42.105Z
 
 ```
 PASS  a release workflow exists

@@ -251,8 +251,17 @@ const vscodeStub = {
 };
 
 const originalLoad = Module._load;
+/**
+ * The extension asks the OS how much RAM there is and switches to low-end mode
+ * below 8 GB. Reading the real figure makes the suite behave differently on a
+ * 2 GB laptop and a 16 GB CI runner, so the host is pinned to 4 GB here: the
+ * low-end path is then exercised on every machine, deterministically.
+ */
+const FAKE_RAM = 4 * 1024 ** 3;
+const osStub = { ...require('node:os'), totalmem: () => FAKE_RAM };
 Module._load = function (request, parent, isMain) {
   if (request === 'vscode') return vscodeStub;
+  if (request === 'node:os' || request === 'os') return osStub;
   return originalLoad.call(this, request, parent, isMain);
 };
 
@@ -507,12 +516,11 @@ async function main() {
   check('the state file carries the v3 schema marker', () =>
     stateJson && stateJson.v === 3 || (() => { throw new Error(`v=${stateJson && stateJson.v}`); })());
 
-  check('T1 gate decision is logged (low-end machine stays on T0)', () => {
+  check('on a 4 GB host the T1 gate keeps T0 (acceptance line)', () => {
     const line = outputLines.find((l) => /T1 off: low-end machine|T1 ready:/.test(l));
     if (!line) throw new Error('no T1 gate line');
-    if (os.totalmem() < 8 * 1024 ** 3) {
-      if (!/T1 off: low-end machine/.test(line)) throw new Error(`unexpected: ${line}`);
-    }
+    // The host is pinned to 4 GB above, so this is a hard assertion, not a guess.
+    if (!/T1 off: low-end machine/.test(line)) throw new Error(`unexpected: ${line}`);
   });
   check('the prompt still went out (T1 being off never blocks)', () =>
     panelPosts.some((m) => m.type === 'delta') || (() => { throw new Error('no deltas'); })());
@@ -526,10 +534,8 @@ async function main() {
     // this window, so the guard is generous and the number is printed.
     if (activationMs > 3000) throw new Error(`activation took ${activationMs} ms`);
   });
-  check('low-end mode is active on this machine and shown in the status bar (§7.1)', () => {
-    if (os.totalmem() <= 8 * 1024 ** 3) {
-      if (!/LE/.test(statusBar.text)) throw new Error(`no LE marker: ${statusBar.text}`);
-    }
+  check('low-end mode is active on a 4 GB host and shown in the status bar (§7.1)', () => {
+    if (!/LE/.test(statusBar.text)) throw new Error(`no LE marker: ${statusBar.text}`);
     if (!outputLines.some((l) => /low-end: /.test(l))) throw new Error('no low-end line in Output');
   });
   check('the breakage-report command is contributed (§7.2)', () => {

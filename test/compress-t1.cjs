@@ -115,12 +115,27 @@ async function main() {
   check('the threshold is configurable', () =>
     assert.strictEqual(t1.shouldEnableT1(6 * GB, { minRamBytes: 4 * GB }).enable, true));
 
+  // The acceptance line is about an 8 GB laptop, not about whichever machine the
+  // suite happens to run on: a 16 GB CI runner must not turn this into a failure.
+  // Both sides are therefore asserted against explicit RAM figures.
   const here = os.totalmem();
   const hereGate = t1.shouldEnableT1(here);
   console.log(`  this machine: ${(here / GB).toFixed(2)} GB → T1 ${hereGate.enable ? 'on' : 'off'} (${hereGate.reason})\n`);
-  check('this low-end machine stays on T0 (the acceptance line)', () => {
-    assert.ok(here < 8 * GB, `machine reports ${(here / GB).toFixed(1)} GB`);
-    assert.strictEqual(hereGate.enable, false);
+  // §5.6: "auto-off if RAM < 8 GB" — so 8 GB exactly is still allowed.
+  check('a 4 GB laptop stays on T0', () =>
+    assert.strictEqual(t1.shouldEnableT1(4 * GB).enable, false));
+  check('a 7 GB laptop stays on T0 (the acceptance line)', () => {
+    const gate = t1.shouldEnableT1(7 * GB);
+    assert.strictEqual(gate.enable, false, gate.reason);
+    assert.match(gate.reason, /7\.0 GB|low-end/i);
+  });
+  check('8 GB exactly is the boundary and is allowed', () =>
+    assert.strictEqual(t1.shouldEnableT1(8 * GB).enable, true));
+  check('a 16 GB machine is allowed T1', () => assert.strictEqual(t1.shouldEnableT1(16 * GB).enable, true));
+  check('the gate agrees with the machine it is actually running on', () => {
+    // Whatever this host reports, the decision must match the rule, not a guess.
+    const expected = here >= 8 * GB;
+    assert.strictEqual(hereGate.enable, expected, `${(here / GB).toFixed(1)} GB → ${hereGate.reason}`);
   });
 
   /* --------------------------------------------- 2. identifiers are extracted */

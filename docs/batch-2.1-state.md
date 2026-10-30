@@ -1,6 +1,6 @@
 # Batch 2.1 — state schema, gzip persistence, T1 worker
 
-Generated: 2026-10-30T04:18:41.283Z
+Generated: 2026-10-30T09:12:56.892Z
 Node v20.20.2 · worker: inline
 
 Acceptance: **10 turns → `state.full.json.gz` with deltas.**
@@ -69,7 +69,7 @@ snapshots     2
 ## Turn latency (T1 in the worker, per turn)
 
 ```
-min 4 ms · median 5 ms · max 13 ms
+min 5 ms · median 8 ms · max 17 ms
 ```
 
 ## Delta ops observed
