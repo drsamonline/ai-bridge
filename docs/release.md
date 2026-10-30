@@ -1,6 +1,6 @@
 # Release machinery
 
-Generated: 2026-10-30T09:34:54.715Z
+Generated: 2026-10-30T17:58:26.760Z
 
 ```
 PASS  a release workflow exists
@@ -15,6 +15,10 @@ PASS  the versioned release is the one that is gated
 PASS  the rolling build is a pre-release, so it never outranks a version
 PASS  it tests before publishing
 PASS  it needs write permission for contents
+PASS  the landing page exists at the repo root (Pages serves the root here)
+PASS  the root page is in sync with docs/index.html
+PASS  .nojekyll exists so Pages serves the folders verbatim
+PASS  asset URLs are cache-busted so a stale CDN cannot serve the old page
 PASS  a Pages workflow exists and deploys docs/
 PASS  Pages checks its assets before deploying
 PASS  CI still runs the whole suite
@@ -28,7 +32,7 @@ PASS  an unknown bump is refused
 PASS  the two manifests agree in the repo right now
 ```
 
-Result: 23/23 passed.
+Result: 27/27 passed.
 
 ## How a release happens
 
