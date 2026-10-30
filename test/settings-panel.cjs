@@ -158,9 +158,13 @@ async function main() {
     if (m.type() === 'error') console.log('  [console.error]', m.text().slice(0, 300));
   });
 
-  const htmlFile = path.join(os.tmpdir(), `ai-bridge-settings-${process.pid}.html`);
-  fs.writeFileSync(htmlFile, html);
-  await page.goto(`file://${htmlFile}`, { waitUntil: 'domcontentloaded' });
+  // Served through request interception rather than a file:// URL: on a CI runner
+  // Chromium is often a snap, whose private /tmp the page cannot read
+  // (net::ERR_FILE_NOT_FOUND). A routed URL has no filesystem at all.
+  await page.route('http://ai-bridge.test/**', (route) =>
+    route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: html }),
+  );
+  await page.goto('http://ai-bridge.test/settings.html', { waitUntil: 'domcontentloaded' });
   await sleep(300);
 
   /**
@@ -402,7 +406,6 @@ async function main() {
   await browser.close();
   chrome.kill('SIGKILL');
   fs.rmSync(profile, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
-  fs.rmSync(htmlFile, { force: true });
 
   const report = [
     '# Batch 4.1 — settings panel (UI evidence)',

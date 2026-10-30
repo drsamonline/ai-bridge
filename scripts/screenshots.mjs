@@ -97,9 +97,11 @@ async function shootChat(browser) {
   await page.addInitScript(stub);
   const { ChatPanelProvider } = require(path.join(ROOT, 'extension', 'dist', 'chatPanel.js'));
   const html = new ChatPanelProvider({ fsPath: '/x', path: '/x' }, () => {}).html('SHOTNONCE0000000000000000');
-  const file = path.join(OUT, '.chat.html');
-  fs.writeFileSync(file, html);
-  await page.goto(`file://${file}`);
+  // Routed rather than file://: snap Chromium cannot read /tmp or hidden paths.
+  await page.route('http://ai-bridge.test/**', (route) =>
+    route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: html }),
+  );
+  await page.goto('http://ai-bridge.test/chat.html');
   await page.addStyleTag({ content: DARK });
   const post = (m) => page.evaluate((msg) => window.postMessage(msg, '*'), m);
   await post({ type: 'status', text: 'Attached · ChatGPT · GPT-5 mini (free)' });
@@ -128,7 +130,6 @@ async function shootChat(browser) {
   });
   await new Promise((r) => setTimeout(r, 800));
   await page.screenshot({ path: path.join(OUT, 'chat-panel.png') });
-  fs.rmSync(file, { force: true });
   await ctx.close();
 }
 
@@ -142,9 +143,10 @@ async function shootSettings(browser, tab, name) {
   for (const f of fields.FIELDS) values[f.key] = fields.sampleValue(f);
   Object.assign(values, OVERRIDES);
   const html = renderSettingsHtml({ nonce: 'SHOTNONCE0000000000000000', snapshot: SNAPSHOT, tab });
-  const file = path.join(OUT, `.${tab}.html`);
-  fs.writeFileSync(file, html);
-  await page.goto(`file://${file}`);
+  await page.route('http://ai-bridge.test/**', (route) =>
+    route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: html }),
+  );
+  await page.goto(`http://ai-bridge.test/${tab}.html`);
   await page.addStyleTag({ content: DARK });
   await page.evaluate(
     (payload) => window.postMessage({ type: 'state', values: payload.values, errors: {}, snapshot: payload.snapshot }, '*'),
@@ -154,7 +156,6 @@ async function shootSettings(browser, tab, name) {
   // Presentation only: drop the status footer so the crop is clean.
   await page.evaluate(() => { const f = document.getElementById('status'); if (f) f.remove(); });
   await page.screenshot({ path: path.join(OUT, `${name}.png`) });
-  fs.rmSync(file, { force: true });
   await ctx.close();
 }
 

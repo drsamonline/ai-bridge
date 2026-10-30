@@ -7,8 +7,8 @@
 **Your browser's AI, inside VS Code. No API key, no second subscription.**
 
 <a href="LICENSE"><img src="docs/badges/license.svg" alt="PolyForm Noncommercial 1.0.0" /></a>
-<a href="extension/package.json"><img src="docs/badges/version.svg" alt="version 0.20.1" /></a>
-<a href="#what-is-actually-proven"><img src="docs/badges/tests.svg" alt="623 checks passing" /></a>
+<a href="extension/package.json"><img src="docs/badges/version.svg" alt="version 0.20.2" /></a>
+<a href="#what-is-actually-proven"><img src="docs/badges/tests.svg" alt="626 checks passing" /></a>
 <a href="https://code.visualstudio.com"><img src="docs/badges/vscode.svg" alt="VS Code 1.90 or newer" /></a>
 <a href="https://nodejs.org"><img src="docs/badges/node.svg" alt="Node 20 or newer" /></a>
 <a href="docs/badges/providers.svg"><img src="docs/badges/providers.svg" alt="ChatGPT, Claude, Gemini" /></a>
@@ -56,7 +56,7 @@ It never launches a browser. It never asks for an API key. It uses the tab you o
 **From a build:**
 
 ```bash
-code --install-extension ai-bridge-0.20.1.vsix
+code --install-extension ai-bridge-0.20.2.vsix
 ```
 
 **From source:**
@@ -65,7 +65,7 @@ code --install-extension ai-bridge-0.20.1.vsix
 git clone https://github.com/drsamonline/ai-bridge.git
 cd ai-bridge
 npm install && npm run build && npm run package
-code --install-extension ai-bridge-0.20.1.vsix
+code --install-extension ai-bridge-0.20.2.vsix
 ```
 
 <br />
@@ -177,7 +177,7 @@ This is an experimental project and it would be dishonest to imply otherwise.
 ```bash
 npm install
 npm run build          # tsc across shared, bridge, extension
-npm run test:all       # 623 checks, 21 suites
+npm run test:all       # 626 checks, 21 suites
 npm run test:bench     # token-savings report
 npm run soak           # idle memory soak
 npm run package        # bundles and builds the .vsix

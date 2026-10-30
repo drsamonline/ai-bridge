@@ -1,6 +1,6 @@
 # Batch 5.1 — session rotation
 
-Generated: 2026-10-30T04:20:09.301Z
+Generated: 2026-10-30T09:37:11.967Z
 
 Acceptance: **Simulated limit → context preserved, preview shown.**
 
@@ -40,7 +40,7 @@ Result: 26/26 passed.
 ## The end-to-end rotation
 
 ```
-limit probe      {"limited":true,"kind":"quota","resetAt":1793334304232}
+limit probe      {"limited":true,"kind":"quota","resetAt":1793353326110}
 prompt while limited → ELIMIT: chatgpt is quota (resets in 5 min) — failover lands in batch 5.1/6.1
 boot             132/4000 tokens
 preview shown    true

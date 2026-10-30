@@ -1,6 +1,6 @@
 # Release machinery
 
-Generated: 2026-10-30T09:21:48.315Z
+Generated: 2026-10-30T09:34:54.715Z
 
 ```
 PASS  a release workflow exists
@@ -18,6 +18,7 @@ PASS  it needs write permission for contents
 PASS  a Pages workflow exists and deploys docs/
 PASS  Pages checks its assets before deploying
 PASS  CI still runs the whole suite
+PASS  no browser test loads the page over file://
 PASS  bump patch increments the last number
 PASS  bump minor resets the patch
 PASS  bump major resets minor and patch
@@ -27,7 +28,7 @@ PASS  an unknown bump is refused
 PASS  the two manifests agree in the repo right now
 ```
 
-Result: 22/22 passed.
+Result: 23/23 passed.
 
 ## How a release happens
 

@@ -1,6 +1,6 @@
 # Batch 6.2 — model discovery, isFree routing, delta-only transport
 
-Generated: 2026-10-30T04:21:00.811Z
+Generated: 2026-10-30T09:36:59.055Z
 
 Acceptance: **5 failovers → boot ≤4k each, all deltas present, model list populates Providers tab.**
 

@@ -89,6 +89,18 @@ check('Pages checks its assets before deploying', () => {
 
 check('CI still runs the whole suite', () => assert.match(ci, /npm run test:all/));
 
+/* ------------------------------- portability guard for the browser tests */
+check('no browser test loads the page over file://', () => {
+  // A CI runner's Chromium is often a snap, whose private /tmp the page cannot
+  // read, so file:// navigations fail there and pass locally. Serve the HTML
+  // through request interception instead.
+  const offenders = fs
+    .readdirSync(path.join(ROOT, 'test'))
+    .filter((f) => f.endsWith('.cjs'))
+    .filter((f) => /goto\(`file:\/\//.test(fs.readFileSync(path.join(ROOT, 'test', f), 'utf8')));
+  assert.deepStrictEqual(offenders, [], `file:// navigation in: ${offenders.join(', ')}`);
+});
+
 /* ---------------------------------------------------- the bump script */
 function tempRepo() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bump-'));

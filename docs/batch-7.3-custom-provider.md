@@ -1,6 +1,6 @@
 # "Any provider" — custom provider adapter (spec §1)
 
-Generated: 2026-10-30T04:19:58.944Z
+Generated: 2026-10-30T09:36:16.380Z
 
 ## Checks
 

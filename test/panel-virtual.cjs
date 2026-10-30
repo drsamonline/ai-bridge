@@ -142,9 +142,13 @@ async function main() {
   });
   // setContent reuses the current document, so addInitScript would never run.
   // A real navigation (file://) makes the panel load exactly as it does in VS Code.
-  const htmlFile = path.join(os.tmpdir(), `ai-bridge-panel-${process.pid}.html`);
-  fs.writeFileSync(htmlFile, html);
-  await page.goto(`file://${htmlFile}`, { waitUntil: 'domcontentloaded' });
+  // Served through request interception rather than a file:// URL: on a CI runner
+  // Chromium is often a snap, whose private /tmp the page cannot read
+  // (net::ERR_FILE_NOT_FOUND). A routed URL has no filesystem at all.
+  await page.route('http://ai-bridge.test/**', (route) =>
+    route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: html }),
+  );
+  await page.goto('http://ai-bridge.test/panel.html', { waitUntil: 'domcontentloaded' });
   await sleep(300);
 
   const push = async (msg) => page.evaluate((m) => window.postMessage(m, '*'), msg);
@@ -404,7 +408,6 @@ async function main() {
 
   await page.close();
   await browser.close();
-  fs.rmSync(htmlFile, { force: true });
   chrome.kill('SIGKILL');
   fs.rmSync(profile, { recursive: true, force: true });
 

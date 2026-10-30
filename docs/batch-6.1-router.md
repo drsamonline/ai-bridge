@@ -1,6 +1,6 @@
 # Batch 6.1 — router, Claude and Gemini adapters
 
-Generated: 2026-10-30T04:21:24.122Z
+Generated: 2026-10-30T09:37:28.907Z
 
 Acceptance: **ChatGPT limit → Claude w/ context + toast.**
 
