@@ -1,6 +1,6 @@
 # Batch 1.2 — chat panel evidence (virtual scroll + proposal cards)
 
-Generated: 2026-10-30T09:34:21.011Z
+Generated: 2026-10-30T09:38:20.709Z
 Panel HTML: 17662 bytes · messages pushed: 1000 · viewport 420×640
 
 ## Checks
