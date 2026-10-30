@@ -1,0 +1,49 @@
+name: Landing page
+
+# Publishes docs/ to GitHub Pages whenever the landing page or its screenshots
+# change. The page is self-contained; only the images and the icon are external.
+#
+# This workflow is what makes "Source: GitHub Actions" work: without a workflow
+# that uploads an artifact and deploys it, the site has a source and nothing to
+# serve, which shows up as 502 on every path.
+#
+# Runs on every push to main as well, so a re-deploy is always one commit away.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'extension/media/icon.png'
+      - '.github/workflows/pages.yml'
+      - 'package.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the page and its assets
+        run: |
+          test -f docs/index.html || (echo "docs/index.html missing" && exit 1)
+          test -f docs/screenshots/chat-panel.png || (echo "screenshot missing" && exit 1)
+          grep -q 'screenshots/chat-panel.png' docs/index.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+      - id: deployment
+        uses: actions/deploy-pages@v4
