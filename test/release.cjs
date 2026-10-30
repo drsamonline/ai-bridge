@@ -54,6 +54,25 @@ check('it attaches the .vsix to the release', () => {
   assert.match(release, /softprops\/action-gh-release/);
   assert.match(release, /files:.*\.vsix/);
 });
+check('every push publishes a rolling build, version or not', () => {
+  // The package job must not be gated on a version change...
+  const pkgJob = release.slice(release.indexOf('  package:'));
+  assert.ok(!/^    if: needs\.version\.outputs\.changed/m.test(pkgJob), 'package job is gated');
+  // ...and the rolling release must be unconditional.
+  assert.match(release, /tag_name: latest-build/);
+  const rolling = release.slice(release.indexOf('Publish the rolling build'), release.indexOf('Publish the versioned release'));
+  assert.ok(!/if:/.test(rolling), 'the rolling release is conditional');
+});
+check('the versioned release is the one that is gated', () => {
+  const versioned = release.slice(release.indexOf('Publish the versioned release'));
+  assert.match(versioned, /if: needs\.version\.outputs\.changed == 'true'/);
+  assert.match(versioned, /make_latest: true/);
+});
+check('the rolling build is a pre-release, so it never outranks a version', () => {
+  const rolling = release.slice(release.indexOf('Publish the rolling build'), release.indexOf('Publish the versioned release'));
+  assert.match(rolling, /prerelease: true/);
+  assert.match(rolling, /make_latest: false/);
+});
 check('it tests before publishing', () => {
   assert.match(release, /npm run test:all/);
   assert.ok(release.indexOf('test:all') < release.indexOf('action-gh-release'), 'tests must run before the release step');

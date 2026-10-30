@@ -1,6 +1,6 @@
 # Release machinery
 
-Generated: 2026-10-30T09:12:42.105Z
+Generated: 2026-10-30T09:21:48.315Z
 
 ```
 PASS  a release workflow exists
@@ -10,6 +10,9 @@ PASS  it decides by comparing the version with an existing tag
 PASS  packaging only happens when the version changed
 PASS  it tags as vX.Y.Z
 PASS  it attaches the .vsix to the release
+PASS  every push publishes a rolling build, version or not
+PASS  the versioned release is the one that is gated
+PASS  the rolling build is a pre-release, so it never outranks a version
 PASS  it tests before publishing
 PASS  it needs write permission for contents
 PASS  a Pages workflow exists and deploys docs/
@@ -24,7 +27,7 @@ PASS  an unknown bump is refused
 PASS  the two manifests agree in the repo right now
 ```
 
-Result: 19/19 passed.
+Result: 22/22 passed.
 
 ## How a release happens
 

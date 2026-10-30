@@ -109,10 +109,11 @@ jobs:
         run: npm run test:all
 
   # ----------------------------------------------------------------- package
+  # Runs on every push: the rolling "latest build" release always gets a fresh
+  # .vsix, so there is always something downloadable without bumping a version.
   package:
     name: Build the .vsix
     needs: [version, verify]
-    if: needs.version.outputs.changed == 'true' || inputs.force == true
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -139,7 +140,32 @@ jobs:
           name: ai-bridge-${{ needs.version.outputs.version }}
           path: ai-bridge-${{ needs.version.outputs.version }}.vsix
           if-no-files-found: error
-      - name: Attach to a release
+      # --- 1. rolling build: replaced on every push -----------------------
+      - name: Publish the rolling build
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-build
+          name: Latest build
+          prerelease: true
+          make_latest: false
+          body: |
+            Rolling build of `main` — replaced on every push.
+
+            Commit `${{ github.sha }}` · version `${{ needs.version.outputs.version }}`
+
+            Install:
+            ```bash
+            code --install-extension ai-bridge-${{ needs.version.outputs.version }}.vsix
+            ```
+          files: ai-bridge-${{ needs.version.outputs.version }}.vsix
+          fail_on_unmatched_files: true
+          target_commitish: ${{ github.sha }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # --- 2. versioned release: only when the version is new -------------
+      - name: Publish the versioned release
+        if: needs.version.outputs.changed == 'true' || inputs.force == true
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.version.outputs.tag }}
@@ -148,7 +174,6 @@ jobs:
           files: ai-bridge-${{ needs.version.outputs.version }}.vsix
           fail_on_unmatched_files: true
           make_latest: true
-          # The tag is created at the commit that carries this version.
           target_commitish: ${{ github.sha }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

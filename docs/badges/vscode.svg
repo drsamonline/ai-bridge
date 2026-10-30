@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="113" height="24" role="img" aria-label="VS Code: ≥ 1.90">
+  <title>VS Code: ≥ 1.90</title>
+  <defs>
+    <linearGradient id="s" x2="0" y2="100%">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".12"/>
+      <stop offset="1" stop-color="#000000" stop-opacity=".12"/>
+    </linearGradient>
+  </defs>
+  <g>
+    <rect width="60" height="24" rx="4" fill="#12181f"/>
+    <rect x="60" width="53" height="24" rx="4" fill="#38bdf8"/>
+    <rect width="113" height="24" rx="4" fill="url(#s)"/>
+    <rect x="60" width="2" height="24" fill="#0b0e13" fill-opacity=".35"/>
+  </g>
+  <g fill="#e6edf3" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="11" font-weight="600">
+    <text x="30.0" y="16.5" text-anchor="middle">VS Code</text>
+    <text x="86.5" y="16.5" text-anchor="middle">≥ 1.90</text>
+  </g>
+</svg>

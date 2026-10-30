@@ -6,13 +6,13 @@
 
 **Your browser's AI, inside VS Code. No API key, no second subscription.**
 
-[![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-0d1117?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.20.1-238636?style=flat-square)](extension/package.json)
-[![Tests](https://img.shields.io/badge/tests-600%20passing-238636?style=flat-square)](#what-is-actually-proven)
-[![VS Code](https://img.shields.io/badge/VS%20Code-%5E1.90-58a6ff?style=flat-square)](https://code.visualstudio.com)
-[![Node](https://img.shields.io/badge/node-%E2%89%A520-58a6ff?style=flat-square)](https://nodejs.org)
-[![Status](https://img.shields.io/badge/status-experimental-f0a500?style=flat-square)](#what-is-actually-proven)
-
+<a href="LICENSE"><img src="docs/badges/license.svg" alt="PolyForm Noncommercial 1.0.0" /></a>
+<a href="extension/package.json"><img src="docs/badges/version.svg" alt="version 0.20.1" /></a>
+<a href="#what-is-actually-proven"><img src="docs/badges/tests.svg" alt="623 checks passing" /></a>
+<a href="https://code.visualstudio.com"><img src="docs/badges/vscode.svg" alt="VS Code 1.90 or newer" /></a>
+<a href="https://nodejs.org"><img src="docs/badges/node.svg" alt="Node 20 or newer" /></a>
+<a href="docs/badges/providers.svg"><img src="docs/badges/providers.svg" alt="ChatGPT, Claude, Gemini" /></a>
+<a href="#what-is-actually-proven"><img src="docs/badges/status.svg" alt="experimental" /></a>
 </div>
 
 ---
@@ -192,9 +192,14 @@ npm run version:bump patch   # or minor / major, or an explicit 1.2.3
 git commit -am "release" && git push
 ```
 
-The workflow reads the version, checks whether a `vX.Y.Z` tag exists, and only then builds, tests,
-packs the `.vsix`, tags the commit and publishes it as the latest release. A push that does not bump
-the version still runs the full suite, so a broken build is still caught.
+Every push to `main` publishes **two** things:
+
+| release | when | what |
+|---|---|---|
+| **Latest build** (pre-release) | every push | a fresh `.vsix` from that commit, replaced each time |
+| **vX.Y.Z** (latest) | only when the version changes | the tagged, tested release |
+
+So there is always a downloadable `.vsix`, and version numbers stay meaningful.
 
 `docs/` deploys to GitHub Pages on any change to the landing page.
 

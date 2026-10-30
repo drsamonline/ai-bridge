@@ -1,6 +1,6 @@
 # Bundled artifact (`.vsix` prerequisite)
 
-Generated: 2026-10-30T06:34:11.897Z
+Generated: 2026-10-30T09:21:03.189Z
 
 Bundle: 413.8 KB · self-contained · loads with a stubbed host
 
