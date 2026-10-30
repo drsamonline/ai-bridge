@@ -79,33 +79,19 @@ check('it tests before publishing', () => {
 });
 check('it needs write permission for contents', () => assert.match(release, /contents:\s*write/));
 
-check('the landing page exists at the repo root (Pages serves the root here)', () => {
-  // GitHub Pages on this repo is in legacy branch mode: source = main, path = /.
-  // A docs/-only page is therefore deployed and then ignored, which is exactly
-  // what happened once. The root file is generated from docs/index.html.
-  const root = path.join(ROOT, 'index.html');
-  assert.ok(fs.existsSync(root), 'no root index.html');
-  const html = fs.readFileSync(root, 'utf8');
-  assert.match(html, /Generated from docs\/index\.html/);
-  assert.match(html, /docs\/badges\//);
-  assert.match(html, /docs\/screenshots\//);
+// Pages is set to "Source: GitHub Actions", so the workflow that uploads
+// docs/ IS the deployment. There is no second copy of the page to drift.
+check('the landing page lives in docs/ and nowhere else', () => {
+  assert.ok(fs.existsSync(path.join(ROOT, 'docs', 'index.html')), 'docs/index.html missing');
+  assert.ok(!fs.existsSync(path.join(ROOT, 'index.html')), 'a redundant root index.html is back');
 });
-check('the root page is in sync with docs/index.html', () => {
-  const rootHtml = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-  const docsHtml = fs.readFileSync(path.join(ROOT, 'docs', 'index.html'), 'utf8');
-  const expected = docsHtml
-    .replace(/src="badges\//g, 'src="docs/badges/')
-    .replace(/href="badges\//g, 'href="docs/badges/')
-    .replace(/src="screenshots\//g, 'src="docs/screenshots/')
-    .replace(/src="\.\.\/extension\/media\//g, 'src="extension/media/')
-    .replace(/href="\.\.\/extension\/media\//g, 'href="extension/media/');
-  const strip = (h) => h.replace(/<!--[^>]*-->/g, '').replace(/\s+/g, ' ').trim();
-  assert.strictEqual(strip(rootHtml), strip(expected), 'root index.html is stale — run npm run landing');
+check('the page references its assets relatively', () => {
+  const html = fs.readFileSync(path.join(ROOT, 'docs', 'index.html'), 'utf8');
+  assert.match(html, /badges\/version\.svg/);
+  assert.match(html, /screenshots\/chat-panel\.png/);
 });
-check('.nojekyll exists so Pages serves the folders verbatim', () =>
-  assert.ok(fs.existsSync(path.join(ROOT, '.nojekyll'))));
 check('asset URLs are cache-busted so a stale CDN cannot serve the old page', () => {
-  const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  const html = fs.readFileSync(path.join(ROOT, 'docs', 'index.html'), 'utf8');
   assert.match(html, /badges\/version\.svg\?v=\d+/);
   assert.match(html, /screenshots\/chat-panel\.png\?v=\d+/);
 });

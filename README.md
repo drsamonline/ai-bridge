@@ -7,7 +7,7 @@
 **Your browser's AI, inside VS Code. No API key, no second subscription.**
 
 <a href="LICENSE"><img src="docs/badges/license.svg" alt="PolyForm Noncommercial 1.0.0" /></a>
-<a href="extension/package.json"><img src="docs/badges/version.svg" alt="version 0.20.3" /></a>
+<a href="extension/package.json"><img src="docs/badges/version.svg" alt="version 0.20.4" /></a>
 <a href="#what-is-actually-proven"><img src="docs/badges/tests.svg" alt="626 checks passing" /></a>
 <a href="https://code.visualstudio.com"><img src="docs/badges/vscode.svg" alt="VS Code 1.90 or newer" /></a>
 <a href="https://nodejs.org"><img src="docs/badges/node.svg" alt="Node 20 or newer" /></a>
@@ -56,7 +56,7 @@ It never launches a browser. It never asks for an API key. It uses the tab you o
 **From a build:**
 
 ```bash
-code --install-extension ai-bridge-0.20.3.vsix
+code --install-extension ai-bridge-0.20.4.vsix
 ```
 
 **From source:**
@@ -65,7 +65,7 @@ code --install-extension ai-bridge-0.20.3.vsix
 git clone https://github.com/drsamonline/ai-bridge.git
 cd ai-bridge
 npm install && npm run build && npm run package
-code --install-extension ai-bridge-0.20.3.vsix
+code --install-extension ai-bridge-0.20.4.vsix
 ```
 
 <br />
