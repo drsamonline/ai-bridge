@@ -280,6 +280,8 @@ export class LlamaCppCompressor implements T1Backend {
 
   async compress(text: string, opts: { budgetTokens: number; timeoutMs?: number }): Promise<string> {
     if (!this.loaded) {
+      // Lazy and optional: T1 must not be a hard dependency of the extension host.
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
       const mod = require('node-llama-cpp') as {
         getLlama: () => Promise<unknown>;
         LlamaChatSession?: new (args: unknown) => {

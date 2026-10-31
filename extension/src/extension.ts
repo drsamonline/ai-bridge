@@ -35,6 +35,7 @@ import {
   type ControlEvent,
   type RamSample,
   type HandshakeData,
+  readLock,
 } from '@ai-bridge/shared';
 import { BridgeProcess } from './bridgeProcess';
 import { ChatPanelProvider, type FromPanel } from './chatPanel';
@@ -1720,17 +1721,16 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const redactedLock = (): string => {
     try {
-      const { lock, mode, path } = require('@ai-bridge/shared').readLock() as {
-        lock: Record<string, unknown>;
-        mode: number;
-        path: string;
-      };
+      // readLock is a normal import; the require here was left over from when it
+      // was not, and lint caught it.
+      const { lock, mode, path } = readLock();
+      // Batch 9.5 removed the token, so redacting one that is not there would
+      // print "unde…ined" and look like a leak. Say what is true instead.
+      const shown = lock.token
+        ? { ...lock, token: `${lock.token.slice(0, 4)}…${lock.token.slice(-4)} (redacted)` }
+        : { ...lock, token: 'none — the socket is the authorisation' };
       return (
-        JSON.stringify(
-          { ...lock, token: `${String(lock.token).slice(0, 4)}…${String(lock.token).slice(-4)} (redacted)` },
-          null,
-          2,
-        ) + `\n\npath: ${path}\nmode: 0${mode.toString(8)}`
+        JSON.stringify(shown, null, 2) + `\n\npath: ${path}\nmode: 0${mode.toString(8)}`
       );
     } catch (err) {
       return `lock unavailable: ${(err as Error).message}`;

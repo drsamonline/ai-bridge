@@ -36,74 +36,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /* ------------------------------------------------------------------ fetch */
 
-function canUseGlobalFetch() {
-  const forced = process.env.AI_BRIDGE_TEST_FETCH;
-  if (forced === 'shim') return false;
-  if (forced === 'global') return true;
-  if (typeof fetch !== 'function') return false;
-  const probe = spawnSync(
-    process.execPath,
-    ['-e', "fetch('http://127.0.0.1:1/').then(()=>{},()=>{})"],
-    { timeout: 15000, stdio: 'ignore' },
-  );
-  return probe.status === 0;
-}
-
-function nodeFetch(url, init = {}) {
-  return new Promise((resolve, reject) => {
-    const target = new URL(url);
-    const request = http.request(
-      {
-        hostname: target.hostname,
-        port: target.port || 80,
-        path: target.pathname + target.search,
-        method: init.method || 'GET',
-        headers: init.headers || {},
-      },
-      (response) => {
-        const chunks = [];
-        let settle = () => {};
-        const ended = new Promise((done) => {
-          settle = done;
-        });
-        const stream = new ReadableStream({
-          start(controller) {
-            response.on('data', (chunk) => {
-              chunks.push(Buffer.from(chunk));
-              controller.enqueue(new Uint8Array(chunk));
-            });
-            response.on('end', () => {
-              settle();
-              controller.close();
-            });
-            response.on('error', (err) => {
-              settle();
-              controller.error(err);
-            });
-          },
-          cancel() {
-            response.destroy();
-          },
-        });
-        const asText = () => ended.then(() => Buffer.concat(chunks).toString('utf8'));
-        resolve({
-          ok: response.statusCode >= 200 && response.statusCode < 300,
-          status: response.statusCode,
-          statusText: response.statusMessage || '',
-          headers: { get: (name) => response.headers[String(name).toLowerCase()] ?? null },
-          body: stream,
-          text: asText,
-          json: () => asText().then((text) => JSON.parse(text)),
-        });
-      },
-    );
-    request.on('error', reject);
-    if (init.body) request.write(init.body);
-    request.end();
-  });
-}
-
-const fetchImpl = canUseGlobalFetch() ? undefined : nodeFetch;
+const { resolveFetch } = require('./helpers/fetch-shim.cjs');
+const fetchImpl = resolveFetch();
 
 /* ----------------------------------------------------------------- server */
 

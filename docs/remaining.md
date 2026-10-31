@@ -54,10 +54,11 @@ are open and none is a security hole:
 
 | # | Finding | Why it is still open |
 |---|---|---|
-| F3 | The `nodeFetch` shim is duplicated in four test files (~240 lines) | mechanical, no behaviour at stake |
 | F4 | `extension.ts` is 2,521 lines and holds ~40 command registrations | a refactor with a wide blast radius; not worth it before the editor surfaces are verified |
-| F5 | No linter is configured | adding one would surface ~70 deliberate patterns to triage |
 | F7 | The TCP fallback is dormant code | kept for one release by decision, then deleted |
+
+F3 (duplicated test shim) and F5 (no linter) were closed: one helper module, and
+`npm run lint` in CI. The linter found three real defects on its first run.
 
 ## Known traps, so they are not rediscovered
 

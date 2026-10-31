@@ -33,9 +33,9 @@ The test tree is roughly the size of the bridge and a third of the extension.
 |---|---|---|---|
 | F1 | **High** | `ensureLockDir` and the socket `chmod` both swallowed failure. Since 9.5 removed the shared secret, a file mode is the *only* control on the socket and on the directory that points the client at it — so a silent failure left both reachable by other local users, with no second gate behind it. | **Fixed** — `assertOwnerOnly` verifies and throws; 3 checks |
 | F2 | Medium | The handshake log said "token accepted" for a socket peer, which carries no token. A log that misdescribes the security event is worse than a vague one. | **Fixed** |
-| F3 | Medium | The `nodeFetch` shim is duplicated in four test files — ~240 lines of identical code, and a fix to one would miss the others. | Open |
+| F3 | Medium | The `nodeFetch` shim is duplicated in four test files — ~240 lines of identical code, and a fix to one would miss the others. | **Fixed** — one `test/helpers/fetch-shim.cjs`, ~240 lines removed |
 | F4 | Medium | `extension.ts` at 2,521 lines holds ~40 command registrations, the settings host, the status bar, the panel snapshot and the batch 8–9 feature glue. Every batch has added to it. | Open |
-| F5 | Medium | **No linter.** 59 empty `catch` blocks and 13 casts are all deliberate and commented, but nothing checks that they stay that way. | Open |
+| F5 | Medium | **No linter.** 59 empty `catch` blocks and 13 casts are all deliberate and commented, but nothing checks that they stay that way. | **Fixed** — `npm run lint`, wired into CI. It found 3 real defects on its first run |
 | F6 | Low | `lock.json` is unauthenticated discovery data: whoever can write it can point the client at their own bridge. Mitigated by the directory being owner-only and now fail-closed (F1), so it is an accepted risk, not an oversight. | Accepted |
 | F7 | Low | The TCP fallback (`AI_BRIDGE_TRANSPORT=tcp`) is dormant code kept for one release. | Accepted, time-boxed |
 | F8 | Info | 21 `TODO`/`FIXME` hits are false positives — they are the state layer's TODO *feature* and a `FIXME` in a compression keyword list. No real markers exist. | No action |
@@ -50,6 +50,18 @@ The test tree is roughly the size of the bridge and a third of the extension.
   `assertNoChatContent` (checked in `test:resilience`).
 - **Nothing writes a token to disk any more.** That is 9.5's whole point, and
   `test:handshake` asserts it.
+
+## Found while closing F3 and F5
+
+The linter paid for itself on its first run:
+
+- **`redactedLock` printed `unde…ined`.** It redacted `lock.token`, which 9.5
+  removed — so the debug output looked like a leak of a value that does not exist.
+  It now says "none — the socket is the authorisation".
+- **A lazy `require('@ai-bridge/shared')`** in `extension.ts` for a symbol the
+  file already imported.
+- **A disable directive ten lines above the statement it meant to cover**, in
+  `t1.ts`, so it had never suppressed anything.
 
 ## Not covered by this audit
 

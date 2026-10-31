@@ -28,6 +28,9 @@ jobs:
           sudo apt-get install -y chromium-browser || sudo apt-get install -y chromium
           echo "CHROME_BIN=$(command -v chromium || command -v chromium-browser)" >> "$GITHUB_ENV"
 
+      - name: Lint
+        run: npm run lint
+
       - name: Build
         run: npm run build
 
