@@ -28,6 +28,38 @@ export interface EditorOptions {
   setting: (feature: 'suggestions' | 'fix') => string;
   enabled: (feature: 'suggestions' | 'fix') => boolean;
   log: (message: string) => void;
+  /** Batch 8.3c — serves the proposed file to the diff view. */
+  preview?: { set(uri: vscode.Uri, content: string): void };
+}
+
+/** Scheme for the proposed document the diff view opens beside the real file. */
+export const FIX_SCHEME = 'ai-bridge-fix';
+
+/**
+ * Batch 8.3c — the proposed content, served read-only to `vscode.diff`.
+ *
+ * A diff needs a document URI on both sides; the real file is one and this is the
+ * other. Nothing here is written to disk — the document lives for as long as the
+ * editor keeps it open, and the apply path is still the single `WorkspaceEdit`.
+ */
+export class FixPreviewProvider implements vscode.TextDocumentContentProvider {
+  private readonly documents = new Map<string, string>();
+  private readonly emitter = new vscode.EventEmitter<vscode.Uri>();
+  readonly onDidChange = this.emitter.event;
+
+  set(uri: vscode.Uri, content: string): void {
+    this.documents.set(uri.toString(), content);
+    this.emitter.fire(uri);
+  }
+
+  provideTextDocumentContent(uri: vscode.Uri): string {
+    return this.documents.get(uri.toString()) ?? '';
+  }
+
+  dispose(): void {
+    this.documents.clear();
+    this.emitter.dispose();
+  }
 }
 
 /**
@@ -171,17 +203,64 @@ export async function runFix(
   }
 
   const preview = replacement.length > 800 ? `${replacement.slice(0, 800)}\n…` : replacement;
-  const confirmed = await vscode.window.showWarningMessage(
+  let choice = await vscode.window.showWarningMessage(
     `AI Bridge (${result.modelLabel}) — ${describeFix(replacement)}:`,
     { modal: true, detail: preview },
     'Apply',
+    'Show diff',
   );
-  if (confirmed !== 'Apply') return;
+
+  // Batch 8.3c: the modal shows the text, the diff shows it in place. Someone who
+  // wants the second is about to change their mind or not; either way they should
+  // not have to apply to find out.
+  if (choice === 'Show diff') {
+    await showFixDiff(opts, document, line, replacement);
+    choice = await vscode.window.showWarningMessage(
+      `Apply this fix to ${basename(document.fileName)}?`,
+      { modal: true },
+      'Apply',
+    );
+  }
+  if (choice !== 'Apply') return;
 
   const edit = new vscode.WorkspaceEdit();
   edit.replace(uri, document.lineAt(line).range, replacement);
   const applied = await vscode.workspace.applyEdit(edit);
   opts.log(
     `fix: ${applied ? 'applied' : 'rejected by the editor'} (${result.modelLabel})`,
+  );
+}
+
+function basename(filePath: string): string {
+  const parts = filePath.split(/[\\/]/);
+  return parts[parts.length - 1] || 'file';
+}
+
+/**
+ * Opens the fix as a side-by-side diff: the real file on the left, the file as it
+ * would be on the right.
+ *
+ * Silent when no preview provider was supplied — the modal remains the whole
+ * interaction in that case, which is the behaviour every earlier build had.
+ */
+async function showFixDiff(
+  opts: EditorOptions,
+  document: vscode.TextDocument,
+  line: number,
+  replacement: string,
+): Promise<void> {
+  if (!opts.preview) return;
+
+  const lines = document.getText().split('\n');
+  lines.splice(line, 1, ...replacement.split('\n'));
+
+  const proposed = vscode.Uri.parse(`${FIX_SCHEME}:${encodeURIComponent(document.fileName)}`);
+  opts.preview.set(proposed, lines.join('\n'));
+
+  await vscode.commands.executeCommand(
+    'vscode.diff',
+    document.uri,
+    proposed,
+    `AI Bridge fix — ${basename(document.fileName)}`,
   );
 }

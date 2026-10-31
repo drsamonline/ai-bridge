@@ -177,3 +177,40 @@ providers it is given.
 - **The modal preview** has not been seen in a real editor.
 - **Latency.** The 30-second ceiling lives in the transport, not here; how often a
   free tier answers inside it is unknown.
+
+---
+
+## 8.3c — a side-by-side diff before a fix lands
+
+**Status: landed, registered and smoke-tested; the diff itself is unproven.**
+
+### What landed
+
+The fix flow now offers **Show diff** beside **Apply**. Choosing it opens
+`vscode.diff` with the real file on the left and the file as it would be on the
+right, then asks again before anything is written.
+
+- `FixPreviewProvider` serves the proposed content read-only over the
+  `ai-bridge-fix:` scheme. Nothing touches the disk: the document exists for as
+  long as the editor keeps it open, and the apply path is still one
+  `WorkspaceEdit` over one line range.
+- The provider is registered at activation and disposed with the extension.
+- Without a preview provider the modal is the whole interaction — the behaviour
+  every earlier build had — so the change is additive.
+
+### What the smoke test proves, and what it does not
+
+`extension-smoke` now asserts the `ai-bridge-fix` provider is registered on the
+workspace (41/41). That is the wiring.
+
+It does **not** prove the diff renders, that the proposed document looks right in
+the side-by-side, or that the second confirmation appears — all of which need a
+real editor with a file open. The same caveat as every other editor surface in
+this line.
+
+### A fixture gap this exposed, again
+
+The stub had no `workspace.registerTextDocumentContentProvider`, so activation
+threw. Like the missing `languages` namespace in 8.3b, that was the stub being
+incomplete rather than the code being wrong — every supported VS Code has it. The
+stub now models it and records the schemes registered.

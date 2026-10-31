@@ -20,7 +20,14 @@ import {
   type RoutableModel,
   type ServiceBridge,
 } from './features';
-import { FixProvider, SuggestProvider, runFix, type EditorOptions } from './features/editor';
+import {
+  FIX_SCHEME,
+  FixPreviewProvider,
+  FixProvider,
+  SuggestProvider,
+  runFix,
+  type EditorOptions,
+} from './features/editor';
 import {
   BridgeClient,
   type BrowserStatus,
@@ -1668,9 +1675,13 @@ export function activate(context: vscode.ExtensionContext): void {
 
   /* ---------------------------------------------------------- batch 8.3b */
 
+  // Batch 8.3c — the proposed file the diff view shows beside the real one.
+  const fixPreview = new FixPreviewProvider();
+
   const editorOptions: EditorOptions = {
     bridge: serviceBridge,
     models: routableModels,
+    preview: fixPreview,
     setting: (feature) =>
       vscode.workspace
         .getConfiguration('aiBridge')
@@ -1704,6 +1715,8 @@ export function activate(context: vscode.ExtensionContext): void {
     { dispose: () => void stateManager?.dispose() },
     { dispose: () => void compressor?.stop() },
 
+    vscode.workspace.registerTextDocumentContentProvider(FIX_SCHEME, fixPreview),
+    fixPreview,
     vscode.languages.registerInlineCompletionItemProvider({ pattern: '**' }, suggestProvider),
     vscode.languages.registerCodeActionsProvider(
       { scheme: 'file' },

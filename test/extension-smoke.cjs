@@ -252,6 +252,12 @@ const vscodeStub = {
   workspace: {
     workspaceFolders: undefined,
     textDocuments: [],
+    // Batch 8.3c: the diff preview registers a content provider.
+    contentProviders: [],
+    registerTextDocumentContentProvider(scheme, provider) {
+      this.contentProviders.push({ scheme, provider });
+      return { dispose() {} };
+    },
     getConfiguration() {
       return {
         get(key, def) {
@@ -588,6 +594,12 @@ async function main() {
     const keys = manifest.contributes.keybindings || [];
     if (keys.length < 4) throw new Error(`only ${keys.length} keybindings`);
     for (const k of keys) if (!k.key || !k.command) throw new Error(`malformed binding ${JSON.stringify(k)}`);
+  });
+  check('the fix diff preview is registered (batch 8.3c)', () => {
+    const schemes = vscodeStub.workspace.contentProviders.map((entry) => entry.scheme);
+    if (!schemes.includes('ai-bridge-fix')) {
+      throw new Error(`registered: ${schemes.join(', ') || 'none'}`);
+    }
   });
   check('status bar shows the boot token meter (§6 Status Bar row)', () =>
     /tok \d+(\.\d+)?k?\/4k/.test(statusBar.text) || (() => { throw new Error(statusBar.text); })());
