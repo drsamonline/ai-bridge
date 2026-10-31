@@ -355,6 +355,20 @@ async function main() {
     assert.equal(models[0].isFree, true);
   });
 
+  await check('models: image input is off unless the endpoint declares it', async () => {
+    const registry = newRegistry({ idleTimeoutMs: 2000 });
+    registry.setProviders([endpoint('noimg', '/v1')]);
+    const models = await registry.refresh();
+    assert.equal(models[0].imageInput, false, 'assumed off, not assumed on');
+  });
+
+  await check('models: image input is on when the endpoint declares it', async () => {
+    const registry = newRegistry({ idleTimeoutMs: 2000 });
+    registry.setProviders([endpoint('img', '/v1', { imageInput: true })]);
+    const models = await registry.refresh();
+    assert.equal(models[0].imageInput, true);
+  });
+
   await check('models: an explicit model list wins over the fetched one', async () => {
     const registry = newRegistry({ idleTimeoutMs: 2000 });
     registry.setProviders([

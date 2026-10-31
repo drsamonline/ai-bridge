@@ -67,6 +67,21 @@ function toPart(raw: unknown): LmPart | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
   const part = raw as Record<string, unknown>;
 
+  // LanguageModelDataPart carrying an image (batch 9.1). Checked first: a data
+  // part has no `value`, and falling through would drop it silently.
+  if (
+    typeof part.mimeType === 'string' &&
+    part.mimeType.startsWith('image/') &&
+    part.data !== undefined
+  ) {
+    const data = part.data;
+    const base64 =
+      typeof data === 'string'
+        ? data
+        : Buffer.from(data as Uint8Array).toString('base64');
+    return { kind: 'image', mimeType: part.mimeType, data: base64 };
+  }
+
   // LanguageModelTextPart
   if (typeof part.value === 'string') return { kind: 'text', text: part.value };
   // A tool call: callId + name + input
@@ -118,7 +133,8 @@ export function toMessages(raw: readonly unknown[]): LmMessage[] {
  */
 export interface WireMessage {
   role: string;
-  content: string;
+  /** A string, or parts when the message carries an image. */
+  content: string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
   toolCallId?: string;
   toolCalls?: Array<{ id: string; name: string; arguments: string }>;
 }
@@ -143,10 +159,26 @@ export function toWireMessages(messages: readonly LmMessage[]): WireMessage[] {
         arguments: typeof part.input === 'string' ? part.input : JSON.stringify(part.input ?? {}),
       }));
 
+    // Batch 9.1: an image becomes an inline `data:` URL, which is what an
+    // OpenAI-compatible endpoint accepts. Nothing is uploaded anywhere.
+    const images = message.parts.filter(
+      (part): part is { kind: 'image'; mimeType: string; data: string } =>
+        part.kind === 'image',
+    );
+    const content = images.length
+      ? [
+          ...(text ? [{ type: 'text', text }] : []),
+          ...images.map((image) => ({
+            type: 'image_url',
+            image_url: { url: `data:${image.mimeType};base64,${image.data}` },
+          })),
+        ]
+      : text;
+
     if (toolCalls.length) {
-      out.push({ role: message.role, content: text, toolCalls });
-    } else if (text) {
-      out.push({ role: message.role, content: text });
+      out.push({ role: message.role, content, toolCalls });
+    } else if (text || images.length) {
+      out.push({ role: message.role, content });
     }
 
     // Results travel as their own messages, after the turn that asked for them.
@@ -184,6 +216,10 @@ export function toPromptText(messages: LmMessage[]): string {
       .map((part) => {
         if (part.kind === 'text') return part.text;
         if (part.kind === 'toolResult') return `[tool result ${part.callId}] ${part.content}`;
+        // A web chat takes text only, so an image is named rather than sent. The
+        // provider refuses images for a DOM model before it gets here; this is
+        // the honest rendering if one ever does.
+        if (part.kind === 'image') return `[image ${part.mimeType} attached]`;
         return `[called ${part.name}]`;
       })
       .join('\n');
@@ -246,7 +282,7 @@ export class AiBridgeLanguageModelProvider {
         ? `${model.label} — tool calling on`
         : `${model.label} — tools travel as prompt text`,
       // The DOM path has no tool channel, so Copilot must not offer tools for it.
-      capabilities: { toolCalling: model.toolCalling },
+      capabilities: { toolCalling: model.toolCalling, imageInput: model.imageInput },
     }));
   }
 
@@ -262,10 +298,13 @@ export class AiBridgeLanguageModelProvider {
     const model = models.find((entry) => entry.id === modelId);
     if (!model) throw new Error(`ENOMODEL: "${modelId}" is no longer available`);
 
-    if (hasImagePart(rawMessages)) {
-      // Refusing beats silently dropping: the user would think the model had seen
-      // the screenshot and wonder why it answered as if it had not.
-      throw new Error('ENOIMAGE: this build cannot send images to a model yet');
+    // Batch 9.1: images travel when the model declares it takes them, and are
+    // refused when it does not. Silently dropping one is the worst option — the
+    // user would think the model had seen the screenshot.
+    if (hasImagePart(rawMessages) && (!model.imageInput || model.kind === 'dom')) {
+      throw new Error(
+        `ENOIMAGE: ${model.label} does not accept images — enable imageInput on the endpoint, or use a model that does`,
+      );
     }
 
     const messages = toMessages(rawMessages);

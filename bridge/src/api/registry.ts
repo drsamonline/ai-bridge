@@ -157,6 +157,9 @@ function toModelInfo(config: ApiProviderConfig, upstreamId: string): ApiModelInf
       pinned?.maxOutputTokens ?? config.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
     toolCalling: pinned?.toolCalling ?? config.toolCalling ?? true,
     thinking: pinned?.thinking ?? config.thinking ?? false,
+    // Off unless the endpoint says otherwise: a model that silently ignores an
+    // image looks like a model that cannot see, which is worse than a refusal.
+    imageInput: pinned?.imageInput ?? config.imageInput ?? false,
   };
 }
 

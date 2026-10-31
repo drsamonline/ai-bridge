@@ -140,3 +140,28 @@ package.json                             +test:lm, added to test:all
 
 `engines.vscode` is unchanged at `^1.90`. The bridge, the adapters and the DOM
 path are untouched.
+
+---
+
+## 9.1 — images
+
+The provider advertised no image capability and silently dropped an image part.
+Now:
+
+- `LmPart` gained an `image` kind; `toPart` detects a data part by its `image/*`
+  mime type **before** the text check, because a data part has no `value` and
+  would otherwise fall through and vanish;
+- `toWireMessages` sends an image as an inline `data:` URL — what an
+  OpenAI-compatible endpoint accepts, with no upload step;
+- the capability is per model and **off unless the endpoint declares it**
+  (`imageInput` on the endpoint config), because a model that ignores an image
+  looks exactly like a model that cannot see;
+- a model that does not declare it — and the DOM path, always — refuses with
+  `ENOIMAGE` naming the model, rather than answering as if it had looked.
+
+Checks: `test:lm` 29/29 (4 new), `test:api` 34/34 (2 new: the flag defaults off,
+and is honoured when declared).
+
+Not proven: no real endpoint has received one of these requests. The wire shape
+is the documented OpenAI one; whether a given free tier honours it is theirs to
+say.

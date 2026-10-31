@@ -75,6 +75,7 @@ interface ApiModelRow {
   maxInputTokens?: number;
   maxOutputTokens?: number;
   toolCalling?: boolean;
+  imageInput?: boolean;
 }
 
 interface AdapterRow {
@@ -104,6 +105,9 @@ function makeBridge(opts: RegisterOptions): LmBridge {
             maxInputTokens: row.maxInputTokens ?? 128_000,
             maxOutputTokens: row.maxOutputTokens ?? 8_192,
             toolCalling: row.toolCalling !== false,
+            // Batch 9.1: only what the endpoint declares. An endpoint that
+            // ignores images would otherwise look like a blind model.
+            imageInput: row.imageInput === true,
             source: row.providerId,
           });
         }
@@ -126,6 +130,7 @@ function makeBridge(opts: RegisterOptions): LmBridge {
             maxOutputTokens: DOM_OUTPUT_TOKENS,
             // The DOM path has no tool channel: `ctl.prompt` takes text only.
             toolCalling: false,
+            imageInput: false,
             source: row.id,
           });
         }

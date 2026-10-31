@@ -944,7 +944,8 @@ export class BridgeRuntime {
           ...(system ? [{ role: 'system' as const, content: system }] : []),
           ...(msg.messages ?? []).map((message) => ({
             role: message.role as ApiMessage['role'],
-            content: message.content,
+            // A string, or parts when the message carries an image (batch 9.1).
+            content: message.content as ApiMessage['content'],
             ...(message.toolCallId ? { toolCallId: message.toolCallId } : {}),
             // Batch 8.1b: the assistant's own calls, so a tool result answers a
             // call id the provider actually issued.

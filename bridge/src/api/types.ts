@@ -64,6 +64,8 @@ export interface ApiModelInfo {
   maxOutputTokens: number;
   toolCalling: boolean;
   thinking: boolean;
+  /** Whether the endpoint accepts images. Defaults to false — ask, do not assume. */
+  imageInput: boolean;
 }
 
 export interface ApiToolDefinition {
@@ -82,9 +84,20 @@ export interface ApiToolCall {
   arguments: string;
 }
 
+/**
+ * One part of a multimodal message.
+ *
+ * Batch 9.1 — images. `image_url.url` carries a `data:` URL, which is what every
+ * OpenAI-compatible endpoint accepts for an inline image; there is no upload
+ * step and nothing is fetched from anywhere.
+ */
+export type ApiContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } };
+
 export interface ApiMessage {
   role: ApiMessageRole;
-  content: string;
+  content: string | ApiContentPart[];
   /** For `role: 'tool'` — which call this answers. */
   toolCallId?: string;
   /** For `role: 'assistant'` — calls it made. */

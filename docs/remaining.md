@@ -1,6 +1,6 @@
 # What is left
 
-**861 checks across 31 suites, all green** â€” verified locally and re-run by CI on
+**874 checks across 31 suites, all green** â€” verified locally and re-run by CI on
 every push. (Sum of each suite's own reported total; `compression-bench` writes a
 report instead of counting.)
 
@@ -15,7 +15,8 @@ The batch-8 free-tier line is **complete**: eleven items landed across 0.21.0 â†
 | **`ChatGPT (2 left)`** | Honest for API endpoints, which report `usage` in the stream (8.0). The DOM path keeps the cooldown. |
 | **Tool results back to the model** | The loop closes (8.1b): an assistant turn carries its own tool calls, so a result answers a call id the provider issued. |
 | **Typed errors on the DOM path** | A sign-in page reports `EAUTH` with the host, not "no answer" (8.4b). |
-| **Images** | Refused with `ENOIMAGE` rather than silently dropped. Sending them is still not built. |
+| **Images** | Sent as inline `data:` URLs when the endpoint declares `imageInput`; refused with `ENOIMAGE` naming the model when it does not (9.1). |
+| **Settings UI for the new features** | Endpoints and per-feature models are editable in the Providers tab, and the panel pushes them to the bridge. |
 
 ## Open â€” needs your machine
 
@@ -33,7 +34,6 @@ The batch-8 free-tier line is **complete**: eleven items landed across 0.21.0 â†
 
 | Item | Why |
 |---|---|
-| **Images to the model** | Refused clearly today. Real support needs base64 parts through both transports and a per-endpoint capability check. |
 | **A release object for v0.24.0** | The tag exists; the Release workflow triggers on push to `main`, not on tag creation, so 0.24.0 has no assets. |
 | **T1 / T2 quality** | Built, guarded and tested for safety, never run against a real model. T0's savings are measured: 17% overall, 0% on terse prompts, 37% on repo bundles. |
 | **Windows CI** | More untested branches would add false confidence until someone runs them. |

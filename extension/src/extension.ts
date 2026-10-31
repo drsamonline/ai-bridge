@@ -159,6 +159,7 @@ export function activate(context: vscode.ExtensionContext): void {
       );
       await initT1();
       await pushCustomProviders();
+      await pushApiProviders();
       return compressor;
     } catch (err) {
       write('error', `T0 compressor failed to start: ${(err as Error).message}`);
@@ -1421,14 +1422,20 @@ export function activate(context: vscode.ExtensionContext): void {
         await client.request({ op: 'ctl.config', pollMs: num }).catch(() => undefined);
         write('info', `watchdog poll → ${num} ms`);
         return;
+      case 'aiBridge.api.providers':
+        await pushApiProviders();
+        void vscode.window.showInformationMessage('AI Bridge: endpoints updated.');
+        return;
       case 'aiBridge.custom.providers':
         await pushCustomProviders();
+        await pushApiProviders();
         void vscode.window.showInformationMessage('AI Bridge: custom providers updated.');
         return;
       case 'aiBridge.ui.lowEndMode':
         refreshLowEnd();
         await initT1();
       await pushCustomProviders();
+      await pushApiProviders();
         renderStatus();
         void vscode.window.showInformationMessage(`AI Bridge: low-end mode ${lowEnd.active ? 'on' : 'off'} — ${lowEnd.reason}`);
         return;
@@ -1443,6 +1450,7 @@ export function activate(context: vscode.ExtensionContext): void {
       case 'aiBridge.t1.minRamGb':
         await initT1();
       await pushCustomProviders();
+      await pushApiProviders();
         return;
       case 'aiBridge.bridge.port':
         void vscode.window.showInformationMessage(
@@ -1483,6 +1491,37 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     } catch (err) {
       write('warn', `custom providers not applied: ${(err as Error).message}`);
+    }
+  };
+
+  /**
+   * Batch 8.0 — hand the configured endpoints to the bridge.
+   *
+   * Keys never come from settings: the bridge reads `AI_BRIDGE_API_KEY_<ID>` from
+   * its environment, or the endpoint declares `noApiKey` because it is local.
+   */
+  const pushApiProviders = async (): Promise<void> => {
+    if (phase !== 'ready') return;
+    const raw = cfg().get<unknown[]>('api.providers', []);
+    const providers = Array.isArray(raw) ? raw : [];
+    try {
+      const res = (await client.request({ op: 'ctl.api.providers.set', providers })) as {
+        accepted: string[];
+        rejected: Array<{ id: string; error: string }>;
+      };
+      if (providers.length > 0 || res.rejected.length > 0) {
+        write(
+          res.rejected.length ? 'warn' : 'info',
+          `api endpoints: ${res.accepted.length} accepted${res.rejected.length ? `, ${res.rejected.length} rejected (${res.rejected.map((r) => `${r.id}: ${r.error}`).join('; ')})` : ''}`,
+        );
+      }
+      if (res.rejected.length) {
+        void vscode.window.showWarningMessage(
+          `AI Bridge: ${res.rejected.length} endpoint(s) rejected — ${res.rejected[0]!.error}`,
+        );
+      }
+    } catch (err) {
+      write('warn', `endpoints not applied: ${(err as Error).message}`);
     }
   };
 

@@ -440,6 +440,75 @@ async function main() {
     );
   });
 
+  await check('images: an accepted image becomes an inline data URL', () => {
+    const wire = providerModule.toWireMessages([
+      {
+        role: 'user',
+        parts: [
+          { kind: 'text', text: 'what is this?' },
+          { kind: 'image', mimeType: 'image/png', data: 'AAAA' },
+        ],
+      },
+    ]);
+    const content = wire[0].content;
+    assert.ok(Array.isArray(content), 'content became parts');
+    assert.equal(content[0].type, 'text');
+    assert.equal(content[0].text, 'what is this?');
+    assert.equal(content[1].type, 'image_url');
+    assert.equal(content[1].image_url.url, 'data:image/png;base64,AAAA');
+  });
+
+  await check('images: a model that declares the capability is not refused', async () => {
+    const model = { ...API_MODEL, imageInput: true };
+    const bridge = fakeBridge([model], async () => ({
+      text: 'I see a cat.',
+      thinking: '',
+      toolCalls: [],
+      cancelled: false,
+    }));
+    const reported = [];
+    await makeProvider(bridge).provideLanguageModelChatResponse(
+      API_MODEL.id,
+      [{ role: 1, content: [{ mimeType: 'image/png', data: 'AAAA' }] }],
+      {},
+      { report: (part) => reported.push(part) },
+      { isCancellationRequested: false },
+    );
+    assert.equal(bridge.seen.length, 1, 'the request went out');
+    assert.equal(reported[0].text, 'I see a cat.');
+  });
+
+  await check('images: the DOM path refuses even when the flag is set', async () => {
+    const model = { ...DOM_MODEL, imageInput: true };
+    const bridge = fakeBridge([model], async () => ({
+      text: '',
+      thinking: '',
+      toolCalls: [],
+      cancelled: false,
+    }));
+    await assert.rejects(
+      () =>
+        makeProvider(bridge).provideLanguageModelChatResponse(
+          DOM_MODEL.id,
+          [{ role: 1, content: [{ mimeType: 'image/png', data: 'x' }] }],
+          {},
+          { report() {} },
+          { isCancellationRequested: false },
+        ),
+      /ENOIMAGE/,
+      'a web chat takes text only, whatever the config says',
+    );
+  });
+
+  await check('images: the picker advertises the capability per model', async () => {
+    const provider = makeProvider(
+      fakeBridge([{ ...API_MODEL, imageInput: true }, { ...DOM_MODEL, imageInput: false }], async () => ({})),
+    );
+    const list = await provider.provideLanguageModelChatInformation();
+    assert.equal(list.find((m) => m.id === API_MODEL.id).capabilities.imageInput, true);
+    assert.equal(list.find((m) => m.id === DOM_MODEL.id).capabilities.imageInput, false);
+  });
+
   await check('images: a screenshot is refused, not silently dropped', async () => {
     const bridge = fakeBridge([API_MODEL], async () => ({
       text: '',

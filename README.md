@@ -168,7 +168,7 @@ suites cover it: `npm run test:api` (32 checks) and `npm run test:tools`
 
 This is an experimental project and it would be dishonest to imply otherwise.
 
-**Proven** — 861 checks across 31 suites, run on every push:
+**Proven** — 874 checks across 31 suites, run on every push:
 
 - The bridge, the CDP controller, the watchdog, the router and the state layer.
 - All three adapters and a fourth custom one, driven end to end **against fixtures**.

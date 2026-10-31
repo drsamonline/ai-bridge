@@ -182,7 +182,10 @@ export type ControlMsg =
       model: string;
       messages: Array<{
         role: string;
-        content: string;
+        /** A string, or parts when the message carries an image (batch 9.1). */
+        content:
+          | string
+          | Array<{ type: string; text?: string; image_url?: { url: string } }>;
         toolCallId?: string;
         /** Batch 8.1b: the assistant turn's own calls, so results can answer them. */
         toolCalls?: Array<{ id: string; name: string; arguments: string }>;

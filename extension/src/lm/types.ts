@@ -31,7 +31,9 @@ export interface LmModelInfo {
 export type LmPart =
   | { kind: 'text'; text: string }
   | { kind: 'toolCall'; callId: string; name: string; input: unknown }
-  | { kind: 'toolResult'; callId: string; content: string };
+  | { kind: 'toolResult'; callId: string; content: string }
+  /** Batch 9.1 — an image, carried as base64 with its mime type. */
+  | { kind: 'image'; mimeType: string; data: string };
 
 export interface LmMessage {
   role: 'user' | 'assistant';
@@ -89,6 +91,8 @@ export interface LmBridgeModel {
   toolCalling: boolean;
   /** For a DOM adapter, the adapter id; for an endpoint, the provider id. */
   source: string;
+  /** Whether this model accepts images. */
+  imageInput: boolean;
 }
 
 export interface LmBridgeToolCall {
