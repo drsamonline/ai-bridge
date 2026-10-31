@@ -1041,6 +1041,60 @@ export function activate(context: vscode.ExtensionContext): void {
     write('info', `RAM cap raised to ${pick} MB`);
   };
 
+  /**
+   * Batch 10.0 — one place that decides how the browser is reached.
+   *
+   * `attach` never launches anything; `launch` starts a browser with its own
+   * profile and then attaches; `off` uses endpoints only.
+   */
+  const connectBrowser = async (force = false): Promise<void> => {
+    const config = cfg();
+    const mode = force ? 'launch' : config.get<'attach' | 'launch' | 'off'>('browser.mode', 'attach');
+
+    if (mode === 'off') {
+      write('info', 'browser mode is off — API endpoints only');
+      await refreshStatus();
+      return;
+    }
+    if (mode === 'attach') {
+      await attachBrowser();
+      return;
+    }
+
+    const exePath = config.get<string>('browser.exePath', '');
+    const profileDir = config.get<string>('browser.profileDir', '');
+    const headless = config.get<boolean>('browser.headless', false);
+    write(
+      'info',
+      `launching a browser${headless ? ' (headless)' : ''}${profileDir ? ` with profile ${profileDir}` : ' with a profile of its own'}`,
+    );
+
+    const result = (await client
+      .request({
+        op: 'ctl.browser.launch',
+        ...(exePath ? { executablePath: exePath } : {}),
+        ...(profileDir ? { profileDir } : {}),
+        headless,
+      })
+      .catch((err: Error) => ({ ok: false, error: err.message }))) as {
+      ok: boolean;
+      error?: string;
+      port?: number;
+    };
+
+    if (!result.ok) {
+      write('warn', `browser launch failed: ${result.error}`);
+      void vscode.window.showWarningMessage(
+        `AI Bridge: ${result.error ?? 'could not start the browser'}`,
+      );
+      await refreshStatus();
+      return;
+    }
+
+    write('info', `browser launched on port ${result.port} and attached`);
+    await refreshStatus();
+  };
+
   const attachBrowser = async (): Promise<void> => {
     const ports = cfg().get<number[]>('browser.ports', [9222, 9223]);
     write('info', `attaching via connectOverCDP — probing ports ${ports.join(', ')}`);
@@ -1675,8 +1729,18 @@ export function activate(context: vscode.ExtensionContext): void {
         })
         .catch((err: Error) => write('warn', `cap push failed: ${err.message}`));
 
-      if (cfg().get<boolean>('browser.autoAttach', true)) await attachBrowser();
-      else await refreshStatus();
+      // Batch 10.0: attach (default), launch, or off — and launching only at
+      // startup if the user asked for that, because a browser appearing on every
+      // VS Code launch is exactly the kind of surprise this setting prevents.
+      const mode = cfg().get<'attach' | 'launch' | 'off'>('browser.mode', 'attach');
+      const autoAttach = cfg().get<boolean>('browser.autoAttach', true);
+      const launchOnStart = cfg().get<boolean>('browser.launchOnStart', false);
+      const shouldConnect = mode === 'launch' ? launchOnStart : mode === 'attach' && autoAttach;
+      if (shouldConnect) await connectBrowser();
+      else {
+        if (mode === 'off') write('info', 'browser mode is off — API endpoints only');
+        await refreshStatus();
+      }
     } catch (err) {
       lastError = (err as Error).message;
       setPhase('error', lastError);
@@ -2028,6 +2092,13 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand('aiBridge.bridge.showLog', () => {
       output.show(true);
+    }),
+    vscode.commands.registerCommand('aiBridge.browser.launch', async () => {
+      if (phase !== 'ready') {
+        void vscode.window.showWarningMessage('AI Bridge: start the bridge first.');
+        return;
+      }
+      await connectBrowser(true);
     }),
     vscode.commands.registerCommand('aiBridge.browser.attach', async () => {
       if (phase !== 'ready') {

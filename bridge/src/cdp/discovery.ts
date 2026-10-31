@@ -105,6 +105,7 @@ export function noEndpointMessage(ports: readonly number[]): string {
   return (
     `ENOCDP: nothing listening on ${ports.map((p) => `127.0.0.1:${p}`).join(', ')}. ` +
     'Start Chrome/Edge with --remote-debugging-port=9222 and stay logged in. ' +
-    'The bridge attaches to an existing browser and never launches one.'
+    'Start one yourself, or set aiBridge.browser.mode to "launch" and run ' +
+    'AI Bridge: Launch Browser.'
   );
 }

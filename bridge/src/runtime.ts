@@ -19,6 +19,7 @@ import type {
   RamLevel,
 } from '@ai-bridge/shared';
 import { CdpController } from './cdp/controller';
+import { launchBrowser } from './cdp/launch';
 import { DEFAULT_PORTS } from './cdp/discovery';
 import { RamMonitor } from './ram/monitor';
 import { Watchdog } from './watchdog';
@@ -704,6 +705,27 @@ export class BridgeRuntime {
   async control(msg: ControlMsg): Promise<unknown> {
     const log = this.opts.log;
     switch (msg.op) {
+      case 'ctl.browser.launch': {
+        // Batch 10.0: the one place the bridge starts a browser. Everything after
+        // this is the ordinary attach path, unchanged.
+        const result = await launchBrowser({
+          ...(msg.executablePath ? { executablePath: msg.executablePath } : {}),
+          ...(msg.profileDir ? { profileDir: msg.profileDir } : {}),
+          ...(msg.port !== undefined ? { port: msg.port } : {}),
+          ...(msg.headless !== undefined ? { headless: msg.headless } : {}),
+        });
+        log.info(
+          result.ok
+            ? `browser launched on ${result.port} (${msg.headless === true ? 'headless' : 'windowed'})`
+            : `browser launch failed: ${result.error}`,
+          { profileDir: result.profileDir, executable: result.executablePath },
+        );
+        if (!result.ok) return result;
+
+        const status = await this.controller.attach([result.port]);
+        if (status.tabs.length === 0) await this.controller.newTab('about:blank');
+        return { ...result, status };
+      }
       case 'ctl.attach': {
         const status = await this.controller.attach(msg.ports);
         // The first tab is opened eagerly so the status bar has an age to show

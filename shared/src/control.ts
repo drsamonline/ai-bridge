@@ -120,6 +120,19 @@ export interface AdapterHealthReport {
 
 export type ControlMsg =
   | { op: 'ctl.attach'; ports?: number[] }
+  /**
+   * Batch 10.0 — start a browser with the debugging port, then attach.
+   *
+   * Opt-in. `browser.mode: 'attach'` (the default) never launches anything; this
+   * exists because typing the flag every morning is a real cost.
+   */
+  | {
+      op: 'ctl.browser.launch';
+      executablePath?: string;
+      profileDir?: string;
+      port?: number;
+      headless?: boolean;
+    }
   | { op: 'ctl.detach' }
   | { op: 'ctl.status' }
   | { op: 'ctl.ram' }

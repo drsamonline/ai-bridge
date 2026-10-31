@@ -2,7 +2,7 @@
   "name": "ai-bridge-vscode",
   "displayName": "AI Bridge",
   "description": "Drive a logged-in web chat AI (ChatGPT, Claude, Gemini, or your own) from inside VS Code. No API keys: the extension talks to the browser tab you are already signed in to.",
-  "version": "0.35.0",
+  "version": "0.36.0",
   "publisher": "ai-bridge",
   "private": true,
   "license": "SEE LICENSE IN LICENSE",
@@ -220,6 +220,10 @@
       {
         "command": "aiBridge.fastpath.capture",
         "title": "AI Bridge: Capture Request as Template"
+      },
+      {
+        "command": "aiBridge.browser.launch",
+        "title": "AI Bridge: Launch Browser"
       }
     ],
     "configuration": {
@@ -510,6 +514,36 @@
           "type": "boolean",
           "default": true,
           "description": "Show 'AI Bridge: Fix this' in the Quick Fix menu on errors and warnings."
+        },
+        "aiBridge.browser.mode": {
+          "type": "string",
+          "enum": [
+            "attach",
+            "launch",
+            "off"
+          ],
+          "default": "attach",
+          "markdownDescription": "How the bridge reaches a browser. **attach** \u2014 use one you started with `--remote-debugging-port=9222`; the extension never launches anything. **launch** \u2014 start Chrome/Edge with its own profile, then attach. **off** \u2014 no browser at all; API endpoints only."
+        },
+        "aiBridge.browser.launchOnStart": {
+          "type": "boolean",
+          "default": false,
+          "description": "In launch mode, start the browser when VS Code starts."
+        },
+        "aiBridge.browser.exePath": {
+          "type": "string",
+          "default": "",
+          "description": "Chrome or Edge binary for launch mode. Empty auto-detects the usual locations."
+        },
+        "aiBridge.browser.profileDir": {
+          "type": "string",
+          "default": "",
+          "description": "Profile folder for the launched browser. Empty means one of its own under ~/.ai-bridge."
+        },
+        "aiBridge.browser.headless": {
+          "type": "boolean",
+          "default": false,
+          "description": "Launch without a window. Less RAM, but you cannot watch the page."
         }
       }
     },

@@ -268,3 +268,43 @@ chat that has been prompted with:
 
 Endpoints are deliberately absent: `ctl.api.prompt` is a direct request with no
 rungs, so a rung row for one would be a lie.
+
+---
+
+## 10.0 — browser modes: attach, launch, off
+
+**Status: landed, tested.** `npm run test:launch` (10/10).
+
+The project's oldest claim was "it never launches a browser". That is still the
+**default** and still the honest one — an attached browser is signed in, already
+trusted, and its RAM is the user's to see. But typing a debugging-port command
+every morning is a real cost, so the claim became a setting:
+
+| `browser.mode` | What happens |
+|---|---|
+| `attach` (default) | Use a browser you started with `--remote-debugging-port=9222`. Never launches anything. |
+| `launch` | Start Chrome/Edge with a profile **of its own** under `~/.ai-bridge/browser-profile`, then attach. |
+| `off` | No browser at all — API endpoints only. |
+
+Supporting settings: `browser.exePath` (empty = auto-detect), `browser.profileDir`,
+`browser.headless`, `browser.launchOnStart` (off by default — a window appearing on
+every VS Code start is a surprise), and the command **AI Bridge: Launch Browser**.
+
+Two decisions worth stating:
+
+- **`--user-data-dir` is not optional.** Recent Chrome ignores
+  `--remote-debugging-port` on the default profile, so a launcher that omits it
+  works on old versions and silently fails on new ones. The harness pins it.
+- **A profile of its own** means launch mode never fights with the browser you are
+  already using, and the 500 MB cap measures only the AI tabs.
+
+### A bug the harness found
+
+The first launcher checked `child.pid` and moved on. A binary that does not exist
+fails *asynchronously*, through an `error` event — with no listener that is an
+uncaught exception, so a wrong `exePath` crashed the bridge instead of reporting
+it. It now awaits `spawn`/`error` and returns `ESPAWN: could not start …`.
+
+Not proven: no real browser has been launched by this code. The assertions are the
+arguments we would pass and the failure paths, which is the part that can be wrong
+silently.

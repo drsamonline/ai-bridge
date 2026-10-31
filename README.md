@@ -23,7 +23,7 @@ You are already signed in to ChatGPT in Chrome. You already pay for it. AI Bridg
 that tab over the Chrome DevTools Protocol and drives it from inside VS Code — reading answers,
 writing edits into your workspace, and keeping a project state that survives a new chat.
 
-It never launches a browser. It never asks for an API key. It uses the tab you opened.
+By default it never launches a browser — it uses the tab you opened. It never asks for an API key. If you would rather it started one for you, `browser.mode: "launch"` does that, with a profile of its own so your normal browsing is untouched.
 
 <br />
 
@@ -168,7 +168,7 @@ suites cover it: `npm run test:api` (32 checks) and `npm run test:tools`
 
 This is an experimental project and it would be dishonest to imply otherwise.
 
-**Proven** — 898 checks across 32 suites, run on every push:
+**Proven** — 913 checks across 33 suites, run on every push:
 
 - The bridge, the CDP controller, the watchdog, the router and the state layer.
 - All three adapters and a fourth custom one, driven end to end **against fixtures**.
