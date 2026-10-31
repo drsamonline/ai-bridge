@@ -1889,6 +1889,22 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
 
+      // Batch 8.4b: what the endpoints did recently. Codes and timings only —
+      // the bridge never records a prompt or an answer in these.
+      const apiStatus = (await client
+        .request({ op: 'ctl.api.status' })
+        .catch(() => null)) as {
+        recent?: Array<{
+          t?: number;
+          model?: string;
+          ok?: boolean;
+          ms?: number;
+          code?: string;
+          status?: number;
+          retryAfterMs?: number;
+        }>;
+      } | null;
+
       const broken = diag.matches.find((m) => m.via === 'none') ?? diag.matches[0];
       const report = buildReport({
         adapterId: diag.adapterId,
@@ -1903,6 +1919,7 @@ export function activate(context: vscode.ExtensionContext): void {
         platform: `${process.platform}-${process.arch}`,
         nodeVersion: process.version,
         shape: diag.shape,
+        requests: apiStatus?.recent ?? [],
       });
 
       // Refuse to write if anything resembling the conversation slipped in.

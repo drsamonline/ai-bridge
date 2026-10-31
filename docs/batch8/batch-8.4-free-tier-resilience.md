@@ -114,3 +114,45 @@ does not know the API router exists.
 unchanged: handshake 12/12, router 35/35, custom-provider 12/12 (one flaky
 `ENOTEMPTY` profile cleanup on the first run, clean on retry), settings-model
 62/62, contract 31/31, extension-smoke 40/40, panel-virtual 29/29, release 26/26.
+
+---
+
+## 8.4b — the breakage report carries the endpoint records
+
+**Status: landed, tested.** Checks live in `npm run test:resilience` (22/22).
+
+### What landed
+
+The bridge already kept the last 20 endpoint requests (`code`, `status`, `ms`,
+`retryAfterMs`) and exposed them on `ctl.api.status`; nothing consumed them. Now
+`buildReport` does:
+
+- `BreakageInput.requests` → `BreakageReport.requests`, capped at 20, mapped
+  field by field;
+- `summarise` counts the failures, so the toast after exporting says
+  `… 1/2 endpoint request(s) failed`;
+- the diagnostics command fetches `ctl.api.status` and passes `recent` in.
+
+### The guard is unchanged — and now proven against the new field
+
+The privacy property of this report is structural: `buildReport` copies only
+allow-listed keys, so an unknown key cannot reach the file even when a caller
+passes it. The new checks assert exactly that — a request object carrying
+`prompt` and `answer` produces neither — and then assert the stronger thing: a
+chat fragment smuggled into `model`, a field that *is* copied, is caught by
+`assertNoChatContent` and blocks the write.
+
+That second check is the one that matters. An allow-list protects the fields
+nobody thought about; it does not protect the fields that are copied, which is
+why the guard exists on top of it.
+
+### Not proven
+
+- **The file has not been written by a real editor.** The report object is tested;
+  the save dialog and the write are not.
+- **The records are from synthetic and loopback requests.** What a real provider's
+  failure looks like in the ring is unknown.
+- **8.3c (a side-by-side diff before a fix lands) is still open.** It is pure
+  editor glue with no way to verify it here, and the modal already shows the exact
+  replacement and its line count — so it stays a nicety rather than a gap in the
+  guarantee.

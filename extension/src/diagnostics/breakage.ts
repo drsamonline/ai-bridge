@@ -34,6 +34,27 @@ export interface BreakageInput {
   nodeVersion: string;
   shape?: DomShape | null;
   when?: number;
+  /**
+   * Batch 8.4b — the endpoint requests the bridge remembers.
+   *
+   * Fields only: a code, a status, a duration. The bridge never records a prompt
+   * or an answer in these, and `buildReport` copies only the keys below — so a
+   * caller that passes chat text in one of them is caught by
+   * `assertNoChatContent` rather than quietly written out.
+   */
+  requests?: EndpointRequestRecord[];
+}
+
+/** One endpoint request, as the bridge reports it. */
+export interface EndpointRequestRecord {
+  /** Epoch milliseconds. */
+  t?: number;
+  model?: string;
+  ok?: boolean;
+  ms?: number;
+  code?: string;
+  status?: number;
+  retryAfterMs?: number;
 }
 
 export interface BreakageReport {
@@ -44,6 +65,8 @@ export interface BreakageReport {
   error: { code: string; message: string };
   environment: { extensionVersion: string; bridgeVersion: string | null; platform: string; nodeVersion: string };
   shape: DomShape | null;
+  /** The last endpoint requests: code, status, timing. Never a prompt or answer. */
+  requests: EndpointRequestRecord[];
   /** Always true: this artifact contains no conversation content. */
   containsChatContent: false;
 }
@@ -101,6 +124,15 @@ export function buildReport(input: BreakageInput): BreakageReport {
           ),
         }
       : null,
+    requests: (input.requests ?? []).slice(0, 20).map((request) => ({
+      ...(typeof request.t === 'number' ? { t: request.t } : {}),
+      ...(typeof request.model === 'string' ? { model: String(request.model).slice(0, 120) } : {}),
+      ok: request.ok === true,
+      ms: Number(request.ms) || 0,
+      ...(typeof request.code === 'string' ? { code: String(request.code).slice(0, 40) } : {}),
+      ...(typeof request.status === 'number' ? { status: request.status } : {}),
+      ...(typeof request.retryAfterMs === 'number' ? { retryAfterMs: request.retryAfterMs } : {}),
+    })),
     containsChatContent: false,
   };
 }
@@ -130,5 +162,9 @@ export function assertNoChatContent(
 /** A short, human-readable summary for the toast after exporting. */
 export function summarise(report: BreakageReport): string {
   const tried = report.selectors.tried.length;
-  return `${report.adapter.id}: ${report.adapter.role} unresolved on ${report.adapter.host} (${tried} selector(s) tried, ${report.error.code})`;
+  const failed = report.requests.filter((request) => request.ok !== true).length;
+  const endpoints = report.requests.length
+    ? `, ${failed}/${report.requests.length} endpoint request(s) failed`
+    : '';
+  return `${report.adapter.id}: ${report.adapter.role} unresolved on ${report.adapter.host} (${tried} selector(s) tried, ${report.error.code}${endpoints})`;
 }

@@ -368,6 +368,101 @@ async function main() {
     assert.ok(status.recent.length <= 20, `ring grew to ${status.recent.length}`);
   });
 
+  /* ------------------------------------------------------ the report (8.4b) */
+
+  const breakage = require('../extension/dist/diagnostics/breakage.js');
+
+  const reportInput = (extra = {}) => ({
+    adapterId: 'chatgpt',
+    url: 'https://chat.example.test/c/abc123',
+    role: 'composer',
+    tried: ['#prompt-textarea'],
+    matched: null,
+    via: 'none',
+    error: 'ENOSELECTOR: composer did not resolve',
+    extensionVersion: '1.2.3',
+    platform: 'linux-x64',
+    nodeVersion: 'v20.0.0',
+    ...extra,
+  });
+
+  const apiRecent = async () => (await runtime.control({ op: 'ctl.api.status' })).recent;
+
+  await check('report: a record keeps its code, status and retry-after', () => {
+    const report = breakage.buildReport(
+      reportInput({
+        requests: [
+          {
+            t: 1,
+            model: 'custom:ep/m',
+            ok: false,
+            ms: 12,
+            code: 'ERATELIMIT',
+            status: 429,
+            retryAfterMs: 2000,
+          },
+          { t: 2, model: 'custom:ep/m', ok: true, ms: 8 },
+        ],
+      }),
+    );
+    assert.equal(report.requests.length, 2);
+    assert.equal(report.requests[0].code, 'ERATELIMIT');
+    assert.equal(report.requests[0].status, 429);
+    assert.equal(report.requests[0].retryAfterMs, 2000);
+    assert.equal(report.requests[1].ok, true);
+    assert.equal(report.requests[1].code, undefined, 'a success carries no code');
+  });
+
+  await check('report: the live records flow through, bounded', async () => {
+    // The ring is capped at 20, so the check counts what the bridge has rather
+    // than assuming a particular record survived the earlier checks.
+    const live = await apiRecent();
+    const report = breakage.buildReport(reportInput({ requests: live }));
+    assert.equal(report.requests.length, Math.min(20, live.length));
+    assert.ok(report.requests.length > 0, 'the bridge had records to give');
+  });
+
+  await check('report: only allow-listed fields survive', () => {
+    const report = breakage.buildReport(
+      reportInput({
+        requests: [
+          { model: 'custom:x/y', ok: true, ms: 5, prompt: 'secret chat text', answer: 'secret' },
+        ],
+      }),
+    );
+    assert.equal(report.requests.length, 1);
+    assert.equal(report.requests[0].model, 'custom:x/y');
+    assert.equal(report.requests[0].prompt, undefined, 'an unknown key is not copied');
+    assert.equal(report.requests[0].answer, undefined);
+  });
+
+  await check('report: the no-chat guard still passes with records present', async () => {
+    const report = breakage.buildReport(reportInput({ requests: await apiRecent() }));
+    const guard = breakage.assertNoChatContent(report, ['hi', 'read it']);
+    assert.equal(guard.ok, true, `leaked: ${guard.leaked.join(', ')}`);
+  });
+
+  await check('report: chat text smuggled into a record is caught by the guard', () => {
+    const report = breakage.buildReport(
+      reportInput({ requests: [{ model: 'please summarise my private notes', ok: true, ms: 1 }] }),
+    );
+    const guard = breakage.assertNoChatContent(report, ['summarise my private notes']);
+    assert.equal(guard.ok, false, 'the guard covers the new field too');
+  });
+
+  await check('report: the summary counts endpoint failures', () => {
+    const report = breakage.buildReport(
+      reportInput({ requests: [{ ok: false, ms: 1 }, { ok: true, ms: 2 }] }),
+    );
+    assert.match(breakage.summarise(report), /1\/2 endpoint request\(s\) failed/);
+  });
+
+  await check('report: a report with no endpoints says nothing about them', () => {
+    const report = breakage.buildReport(reportInput());
+    assert.deepEqual(report.requests, []);
+    assert.ok(!breakage.summarise(report).includes('endpoint request'));
+  });
+
   /* ------------------------------------------------------------------ total */
 
   server.close();
