@@ -37,6 +37,7 @@ import {
   buildToolsSystemPrompt,
   type ResponseSink,
 } from './protocol';
+import { RungPolicy, validateTemplate, type FastPathTemplate } from './fastpath';
 import { composeBoot, deltaLineCount } from './bootTransport';
 import { DOM_SHAPE_SNIPPET } from '@ai-bridge/shared';
 import { isStreamingAdapter } from './adapters/types';
@@ -99,6 +100,12 @@ export class BridgeRuntime {
     retryAfterMs?: number;
   }> = [];
   private apiSeq = 0;
+  /**
+   * Batch 9.0 — which rung last worked per provider, and the templates that make
+   * the fast rung possible. Empty by default: no provider template ships here.
+   */
+  readonly rungs = new RungPolicy();
+  private readonly fastpath = new Map<string, FastPathTemplate>();
   readonly adapters: AdapterRegistry;
   readonly router: Router;
   readonly bus = new EventEmitter();
@@ -519,6 +526,23 @@ export class BridgeRuntime {
     };
   }
 
+  /** The templates, with the secret-free shape a status call may return. */
+  private fastpathList(): Array<{
+    providerId: string;
+    url: string;
+    method: string;
+    enabled: boolean;
+    hasHeaders: boolean;
+  }> {
+    return [...this.fastpath.values()].map((template) => ({
+      providerId: template.providerId,
+      url: template.url,
+      method: template.method ?? 'POST',
+      enabled: template.enabled === true,
+      hasHeaders: Boolean(template.headers && Object.keys(template.headers).length),
+    }));
+  }
+
   /** Batch 8.4: one record per endpoint request, for the breakage report. */
   private recordApi(entry: {
     model: string;
@@ -899,6 +923,31 @@ export class BridgeRuntime {
         log.info(`api: request ${msg.requestId} cancelled`);
         return { requestId: msg.requestId, cancelled: true };
       }
+      /* ------------------------------------------------------- batch 9.0 */
+      case 'ctl.fastpath.set': {
+        const accepted: string[] = [];
+        const rejected: Array<{ id: string; error: string }> = [];
+        const next = new Map<string, FastPathTemplate>();
+        for (const raw of msg.templates ?? []) {
+          const verdict = validateTemplate(raw);
+          if (!verdict.ok) {
+            const id = (raw as { providerId?: unknown } | null)?.providerId;
+            rejected.push({ id: typeof id === 'string' ? id : '?', error: verdict.error });
+            continue;
+          }
+          next.set(verdict.config.providerId, verdict.config);
+          accepted.push(verdict.config.providerId);
+        }
+        this.fastpath.clear();
+        for (const [id, template] of next) this.fastpath.set(id, template);
+        log.info(
+          `fastpath: ${accepted.length} template(s) accepted, ${rejected.length} rejected`,
+          { accepted },
+        );
+        return { accepted, rejected, templates: this.fastpathList() };
+      }
+      case 'ctl.fastpath.status':
+        return { templates: this.fastpathList(), rungs: this.rungs.status() };
       case 'ctl.health':
         return this.health(msg.adapterId);
       case 'ctl.limit': {

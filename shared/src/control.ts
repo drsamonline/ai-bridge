@@ -190,7 +190,16 @@ export type ControlMsg =
       requestId?: string;
     }
   /** Batch 8.4 — stop an in-flight endpoint request at the upstream. */
-  | { op: 'ctl.api.cancel'; requestId: string };
+  | { op: 'ctl.api.cancel'; requestId: string }
+  /**
+   * Batch 9.0 — the fast path.
+   *
+   * No template ships with the extension: each one is a provider's private
+   * request shape, which none of them documents. A template is configuration the
+   * user adds, and it stays disabled until they do.
+   */
+  | { op: 'ctl.fastpath.set'; templates: unknown[] }
+  | { op: 'ctl.fastpath.status' };
 
 export type ControlEventKind =
   | 'attached'

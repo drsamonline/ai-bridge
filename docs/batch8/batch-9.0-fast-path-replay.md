@@ -80,3 +80,67 @@ ChatGPT and Claude sign their requests with device fingerprinting and PoW/Arkose
 respectively. The fast path will work on some endpoints and not others, and a
 provider that is always challenged is simply always on the DOM rung. This batch
 removes the *single point of failure*; it does not remove the selectors.
+
+## Result
+
+**Status: machinery landed and tested; no provider template shipped.**
+Harness: `npm run test:fastpath` (25/25).
+
+### What landed
+
+| Piece | Detail |
+|---|---|
+| `bridge/src/fastpath/types.ts` | `FastPathTemplate`, `renderTemplate`, `validateTemplate` |
+| `bridge/src/fastpath/detect.ts` | `classifyResponse` → `stream` / `challenge` / `auth` / `error`, with the marker that fired |
+| `bridge/src/fastpath/replay.ts` | `replayInPage`: the same request, run inside the owned tab, streamed back |
+| `bridge/src/fastpath/policy.ts` | `RungPolicy`: which rung last worked, cheapest-first otherwise |
+| `shared/src/control.ts` | `ctl.fastpath.set`, `ctl.fastpath.status` |
+
+### The honest part: no templates
+
+ChatGPT, Claude and Gemini all sign their requests with device fingerprints or
+proof-of-work. None of them documents the shape, and this environment has no
+account to capture one from. **Guessing a template would be fiction**, so none
+ships: a template is configuration the user adds after capturing a request from
+their own tab, and it is `enabled: false` until they do.
+
+That is also why `runtime.prompt()` is untouched. The machinery is reachable
+through `ctl.fastpath.*`; wiring the rungs into the prompt loop is **9.0b**, and
+it needs a real provider to point at before it is worth doing.
+
+### What is better here than upstream
+
+They had to launch a browser with a persistent profile to get a trusted session,
+plus a stealth script to hide that it was headless. We attach to a tab the user
+already signed into, so the replay is a `fetch` inside that page: the cookies and
+the fingerprint are already there. `replayInPage` sends nothing of its own — no
+`Network.getCookies`, no header mirroring — because the page supplies both.
+
+### Decisions worth recording
+
+- **A bare 403 is an error, not "signed out".** Every WAF in the list answers 403
+  for a challenge it has already decided against; calling that auth would send the
+  user to a login page that changes nothing.
+- **Unknown is an error, not a guess.** A challenge page that changes its wording
+  shows up as `error` — visible and reportable — rather than being silently
+  classified as a stream.
+- **A template without `{{prompt}}` is rejected**, not accepted-and-broken: it
+  would send a request with no question in it, and get a plausible answer about
+  nothing.
+- **Two evaluates, not one.** Awaiting the fetch inside a single `evaluate` would
+  block the read loop until the answer completed, which defeats streaming.
+
+### Not proven
+
+- **No provider has been replayed.** The harness runs the page-side functions
+  against installed globals and a fake transport, which proves the handshake, the
+  streaming and the timeouts — not that a real ChatGPT tab accepts the request.
+- **The detector is written from public descriptions** of each challenge, not from
+  a live session. Expect to add markers.
+- **The rungs are not wired into `prompt()`** (9.0b).
+
+### Verification
+
+`test:fastpath` 25/25; handshake 12/12, router 35/35, extension-smoke 40/40,
+release 26/26, api-tools 34/34, lm-provider 19/19, features-routing 27/27,
+contract 31/31 (one flaky `ENOTEMPTY` profile cleanup, clean on retry).
