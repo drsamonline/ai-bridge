@@ -398,7 +398,19 @@ async function main() {
     if (!/RAM \d+\/\d+/.test(liveText)) throw new Error(`got: ${liveText}`);
   });
   check('status bar shows tab age', () => {
-    if (!/tab \d+[smh]/.test(liveText)) throw new Error(`got: ${liveText}`);
+    // A tab opened moments ago has no age to show: the segment only renders once
+    // the bridge reports a positive one. Asserting the live text therefore made
+    // this check depend on the clock — it passed locally at 2 s and failed in CI
+    // at 0 ms. Assert the rendering rule on a known age instead, and accept the
+    // live text whenever it does carry one.
+    if (/tab \d+[smh]/.test(liveText)) return;
+    const { statusText } = require('../extension/dist/statusBar.js');
+    const rendered = statusText({
+      phase: 'ready',
+      browser: { attached: true, name: 'Chrome', tabAgeMs: 2_000 },
+      ram: { browser: { totalBytes: 1_048_576 }, capBytes: 500 * 1_048_576 },
+    });
+    if (!/tab 2s/.test(rendered)) throw new Error(`got: ${rendered}`);
   });
   check('status bar is visible', () => {
     if (!statusBar.visible) throw new Error('status bar hidden');
