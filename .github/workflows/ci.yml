@@ -75,11 +75,15 @@ jobs:
         shell: bash
         run: |
           set -e
-          for suite in \
-            api-openai api-tools api-resilience lm-provider features-routing \
-            features-editor fastpath fastpath-prompt signin settings-model \
-            settings-panel release bundle compress-t0 compress-t1 router \
-            state-t1 state-boot state-guard rotation repo-edit lowend; do
+          # Derived, not hand-listed: a suite that mentions a browser is skipped.
+          # The first version of this job carried a hand-written list and included
+          # settings-panel, which spawns Chromium — the run died at 11 of 22.
+          for file in test/*.cjs; do
+            suite=$(basename "$file" .cjs)
+            if grep -qE 'CHROME_BIN|chromium|playwright|--remote-debugging-port' "$file"; then
+              echo "=== skip $suite (drives a browser; Linux only)"
+              continue
+            fi
             echo "=== $suite"
-            node "test/$suite.cjs"
+            node "$file"
           done

@@ -389,6 +389,13 @@ async function main() {
     assert.match(endpointText, /connect ECONNREFUSED/, 'the error is not shown');
   });
 
+  const testButtons = await page.evaluate(() =>
+    [...document.querySelectorAll('button')].filter((b) => b.textContent === 'Test').length,
+  );
+  check('each endpoint row offers a Test button (batch 9.3)', () => {
+    assert.equal(testButtons, 2, `found ${testButtons} Test button(s)`);
+  });
+
   // ---- performance sparkline ------------------------------------------
   await page.evaluate(() => {
     [...document.querySelectorAll('#tabs button')].find((b) => b.textContent.startsWith('Performance')).click();

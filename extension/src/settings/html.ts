@@ -399,6 +399,11 @@ export function renderSettingsHtml(opts: RenderOptions): string {
             el('span', { class: 'fixed' }, e.lastError ? 'error' : e.signedIn ? 'signed in' : 'no key'),
           );
           row.appendChild(el('span', { class: 'fixed' }, e.models + ' model(s)'));
+          var btn = el('button', { class: 'secondary' }, 'Test');
+          btn.addEventListener('click', function () {
+            vscode.postMessage({ type: 'cmd', cmd: 'action', action: 'testEndpoint', value: e.id });
+          });
+          row.appendChild(btn);
           th.appendChild(row);
           if (e.lastError) {
             th.appendChild(el('div', { class: 'fixed' }, e.lastError));

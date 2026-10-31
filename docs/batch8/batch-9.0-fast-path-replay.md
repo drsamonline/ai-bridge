@@ -227,3 +227,23 @@ adding them to Windows would produce a red run that says nothing about the code.
 
 Not proven: no captured template has been run against a real provider, and the
 Windows job has not completed a first run.
+
+---
+
+## 9.3 — "Test" an endpoint from the panel
+
+**Status: landed, tested.** `settings-panel` 19/19.
+
+Each endpoint row in the Providers tab now carries a **Test** button: it sends one
+eight-token prompt (`Reply with the single word: ok`) through that endpoint and
+reports the round trip — `answered in 412 ms — "ok"`, or the error verbatim. It
+then re-pushes the endpoint list so the dot and the error text reflect what just
+happened.
+
+The point is the distinction between *configured* and *working*. A captured
+template or a typed base URL looks identical in the panel whether it answers or
+not, and the previous answer to "did it work?" was reading the Output channel.
+
+Scope note: the button tests an **endpoint**, not the DOM cascade. Endpoints have
+no rungs — `ctl.api.prompt` is a direct request. Which rung answered is a property
+of `ctl.prompt`, and the panel has no row for a web chat's cascade yet.

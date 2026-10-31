@@ -1281,6 +1281,41 @@ export function activate(context: vscode.ExtensionContext): void {
           await attachBrowser();
           return `Attach attempted — see the Output log.`;
         },
+        /**
+         * Batch 9.3 — one tiny prompt through an endpoint, so "configured" can be
+         * told apart from "working" without reading the log.
+         */
+        testEndpoint: async (value) => {
+          const providerId = String(value ?? '');
+          const status = (await client.request({ op: 'ctl.api.status' }).catch(() => null)) as {
+            models?: Array<{ id: string; label: string; providerId: string }>;
+          } | null;
+          const model = status?.models?.find((entry) => entry.providerId === providerId);
+          if (!model) {
+            return `No model known for "${providerId}" — refresh the endpoint's model list first.`;
+          }
+
+          const startedAt = Date.now();
+          try {
+            const answer = (await client.request({
+              op: 'ctl.api.prompt',
+              model: model.id,
+              messages: [{ role: 'user', content: 'Reply with the single word: ok' }],
+              maxTokens: 8,
+            })) as { text?: string };
+            const ms = Date.now() - startedAt;
+            const text = (answer?.text ?? '').trim().slice(0, 40);
+            write('info', `endpoint test: ${model.id} answered in ${ms} ms — "${text}"`);
+            await pushApiProviders();
+            return `${model.label}: answered in ${ms} ms — "${text || '(no text)'}"`;
+          } catch (err) {
+            const reason = (err as Error).message;
+            write('warn', `endpoint test: ${model.id} failed — ${reason}`);
+            // Re-push so the dot and the error in the panel reflect the failure.
+            await pushApiProviders();
+            return `${model.label}: ${reason}`;
+          }
+        },
         health: () => probeHealth(),
         snapshot: async () => {
           if (!stateManager) return 'State layer is not running.';

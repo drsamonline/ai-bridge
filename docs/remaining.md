@@ -1,6 +1,6 @@
 # What is left
 
-**890 checks across 32 suites, all green** — verified locally and re-run by CI on
+**891 checks across 32 suites, all green** — verified locally and re-run by CI on
 every push. (Sum of each suite's own reported total; `compression-bench` writes a
 report instead of counting.)
 
@@ -16,6 +16,7 @@ The batch-8 free-tier line is **complete**: eleven items landed across 0.21.0 �
 | **Tool results back to the model** | The loop closes (8.1b): an assistant turn carries its own tool calls, so a result answers a call id the provider issued. |
 | **Typed errors on the DOM path** | A sign-in page reports `EAUTH` with the host, not "no answer" (8.4b). |
 | **Images** | Sent as inline `data:` URLs when the endpoint declares `imageInput`; refused with `ENOIMAGE` naming the model when it does not (9.1). |
+| **Endpoint status and a Test button** | The Providers tab shows signed-in / no key / error per endpoint, and one click sends a real prompt (9.2, 9.3). |
 | **Settings UI for the new features** | Endpoints and per-feature models are editable in the Providers tab, and the panel pushes them to the bridge. |
 
 ## Open — needs your machine
@@ -29,9 +30,11 @@ The batch-8 free-tier line is **complete**: eleven items landed across 0.21.0 �
    the report file write. Wired and smoke-tested; never seen in a real editor.
 4. **The 10-minute soak** (`npm run soak`) and the 1-hour cap hold.
 5. **Install the `.vsix`** — unsigned, not on the Marketplace.
-6. **Windows** — a `windows-latest` CI job now builds and runs every browser-free
-   suite. The `ps`/PowerShell parsers and the CDP path are still Linux-only in
-   practice, and the job has not completed a first run.
+6. **Windows** — a `windows-latest` CI job builds, bundles and runs every
+   browser-free suite (the list is derived by grepping each test for browser
+   markers, so it cannot drift). Its first run failed on a mis-classified
+   suite; that is fixed and awaiting a green run. The `ps`/PowerShell parsers
+   and the CDP path are still Linux-only in practice.
 
 ## Open — buildable, deliberately not done
 
@@ -50,6 +53,9 @@ The batch-8 free-tier line is **complete**: eleven items landed across 0.21.0 �
 - **`ENOTEMPTY` on a Chrome profile cleanup** in `models`, `contract` and
   `custom-provider` is a flaky `/tmp` race in a container, not a regression. It
   passes on retry.
+- **A hand-written CI suite list drifts.** The first Windows job listed
+  `settings-panel` as browser-free; it spawns Chromium and died at 11 of 22.
+  The list is now derived from each test file's own browser markers.
 - **undici cannot allocate WASM** in some sandboxes, so the global `fetch` throws
   instead of rejecting. The 8.x harnesses probe for that and fall back to a
   `node:http` shim.
