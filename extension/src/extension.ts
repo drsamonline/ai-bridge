@@ -19,6 +19,7 @@ import {
   stagedDiff,
   type RoutableModel,
   type ServiceBridge,
+  templateFromCurl,
 } from './features';
 import {
   FIX_SCHEME,
@@ -160,6 +161,7 @@ export function activate(context: vscode.ExtensionContext): void {
       await initT1();
       await pushCustomProviders();
       await pushApiProviders();
+      await pushFastPath();
       return compressor;
     } catch (err) {
       write('error', `T0 compressor failed to start: ${(err as Error).message}`);
@@ -1213,6 +1215,10 @@ export function activate(context: vscode.ExtensionContext): void {
     return `Health: ${adapterId} ${report.ready ? 'ready' : 'not ready'}${report.limited ? ' (usage limit)' : ''}.`;
   };
 
+  // Batch 9.2: the last endpoint statuses, refreshed whenever they are pushed.
+  // The snapshot is synchronous, so it reads a cache rather than the bridge.
+  let lastEndpoints: PanelSnapshot['endpoints'] = [];
+
   const panelSnapshot = (): PanelSnapshot => ({
     ramPercent: ram?.percent ?? null,
     ramUsedMb: ram ? Math.round(ram.browser.totalBytes / 1048576) : null,
@@ -1235,6 +1241,7 @@ export function activate(context: vscode.ExtensionContext): void {
     })),
     snapshots: snapshotNames,
     health: lastHealth,
+    endpoints: lastEndpoints,
     t1: t1Gate ? { enabled: t1Gate.enable, reason: t1Gate.reason } : null,
   });
 
@@ -1422,13 +1429,19 @@ export function activate(context: vscode.ExtensionContext): void {
         await client.request({ op: 'ctl.config', pollMs: num }).catch(() => undefined);
         write('info', `watchdog poll → ${num} ms`);
         return;
+      case 'aiBridge.fastpath.templates':
+        await pushFastPath();
+        void vscode.window.showInformationMessage('AI Bridge: templates updated.');
+        return;
       case 'aiBridge.api.providers':
         await pushApiProviders();
+        await pushFastPath();
         void vscode.window.showInformationMessage('AI Bridge: endpoints updated.');
         return;
       case 'aiBridge.custom.providers':
         await pushCustomProviders();
         await pushApiProviders();
+        await pushFastPath();
         void vscode.window.showInformationMessage('AI Bridge: custom providers updated.');
         return;
       case 'aiBridge.ui.lowEndMode':
@@ -1436,6 +1449,7 @@ export function activate(context: vscode.ExtensionContext): void {
         await initT1();
       await pushCustomProviders();
       await pushApiProviders();
+      await pushFastPath();
         renderStatus();
         void vscode.window.showInformationMessage(`AI Bridge: low-end mode ${lowEnd.active ? 'on' : 'off'} — ${lowEnd.reason}`);
         return;
@@ -1451,6 +1465,7 @@ export function activate(context: vscode.ExtensionContext): void {
         await initT1();
       await pushCustomProviders();
       await pushApiProviders();
+      await pushFastPath();
         return;
       case 'aiBridge.bridge.port':
         void vscode.window.showInformationMessage(
@@ -1509,6 +1524,17 @@ export function activate(context: vscode.ExtensionContext): void {
         accepted: string[];
         rejected: Array<{ id: string; error: string }>;
       };
+      const statuses = (res as { providers?: Array<{ id: string; name: string; signedIn: boolean; modelCount: number; lastError?: string }> }).providers;
+      if (statuses) {
+        lastEndpoints = statuses.map((entry) => ({
+          id: entry.id,
+          label: entry.name,
+          signedIn: entry.signedIn,
+          models: entry.modelCount,
+          lastError: entry.lastError ?? null,
+        }));
+        SettingsPanel.refreshIfOpen();
+      }
       if (providers.length > 0 || res.rejected.length > 0) {
         write(
           res.rejected.length ? 'warn' : 'info',
@@ -1522,6 +1548,32 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     } catch (err) {
       write('warn', `endpoints not applied: ${(err as Error).message}`);
+    }
+  };
+
+  /** Batch 9.2 — hand the captured fast-path templates to the bridge. */
+  const pushFastPath = async (): Promise<void> => {
+    if (phase !== 'ready') return;
+    const raw = cfg().get<unknown[]>('fastpath.templates', []);
+    const templates = Array.isArray(raw) ? raw : [];
+    try {
+      const res = (await client.request({ op: 'ctl.fastpath.set', templates })) as {
+        accepted: string[];
+        rejected: Array<{ id: string; error: string }>;
+      };
+      if (templates.length > 0 || res.rejected.length > 0) {
+        write(
+          res.rejected.length ? 'warn' : 'info',
+          `fastpath: ${res.accepted.length} template(s) accepted${res.rejected.length ? `, ${res.rejected.length} rejected (${res.rejected.map((r) => `${r.id}: ${r.error}`).join('; ')})` : ''}`,
+        );
+      }
+      if (res.rejected.length) {
+        void vscode.window.showWarningMessage(
+          `AI Bridge: ${res.rejected.length} template(s) rejected — ${res.rejected[0]!.error}`,
+        );
+      }
+    } catch (err) {
+      write('warn', `templates not applied: ${(err as Error).message}`);
     }
   };
 
@@ -1796,6 +1848,53 @@ export function activate(context: vscode.ExtensionContext): void {
         }
       },
     ),
+    vscode.commands.registerCommand('aiBridge.fastpath.capture', async () => {
+      // Batch 9.2: the machinery in 9.0 is useless without a template, and nobody
+      // should hand-assemble one from DevTools.
+      const clip = await vscode.env.clipboard.readText();
+      if (!clip.trim()) {
+        void vscode.window.showWarningMessage(
+          'AI Bridge: copy the request as cURL from DevTools first (right-click → Copy → Copy as cURL).',
+        );
+        return;
+      }
+      const providerId = await vscode.window.showQuickPick(['chatgpt', 'claude', 'gemini'], {
+        placeHolder: 'Which provider is this request for?',
+      });
+      if (!providerId) return;
+
+      const draft = templateFromCurl(clip, providerId);
+      if (!draft.ok) {
+        void vscode.window.showErrorMessage(`AI Bridge: ${draft.error}`);
+        return;
+      }
+
+      const confirmed = await vscode.window.showWarningMessage(
+        `Captured ${draft.template.method} ${draft.template.url}`,
+        {
+          modal: true,
+          detail:
+            `Replaced ${draft.replaced.path}:\n"${draft.replaced.preview}"\n\n→ {{prompt}}\n\n` +
+            'Saved disabled — enable it in settings once a prompt answers on it. ' +
+            'Credentials were dropped: the replay uses the tab\'s own session.',
+        },
+        'Save',
+      );
+      if (confirmed !== 'Save') return;
+
+      const config = vscode.workspace.getConfiguration('aiBridge');
+      const existing = config.get<unknown[]>('fastpath.templates', []) ?? [];
+      await config.update(
+        'fastpath.templates',
+        [...existing, draft.template],
+        vscode.ConfigurationTarget.Global,
+      );
+      await pushFastPath();
+      write('info', `fastpath: captured a template for ${providerId} (disabled)`);
+      void vscode.window.showInformationMessage(
+        'AI Bridge: template saved disabled. Enable it in settings once it answers.',
+      );
+    }),
     vscode.commands.registerCommand('aiBridge.commit.message', async () => {
       const folder = vscode.workspace.workspaceFolders?.[0];
       if (!folder) {

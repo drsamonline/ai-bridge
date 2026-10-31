@@ -90,6 +90,15 @@ export const FIELDS: FieldSpec[] = [
     help: 'OpenAI-compatible endpoints: [{ id, name, baseUrl, noApiKey, models: [], toolCalling, imageInput, thinking }]. Keys are never stored here — set AI_BRIDGE_API_KEY_<ID> in the environment, or keep noApiKey true for a local server. Batch 8.0.',
   },
   {
+    key: 'aiBridge.fastpath.templates',
+    path: 'fastpath.templates',
+    label: 'Fast-path templates',
+    type: 'json',
+    default: [],
+    tab: 'providers',
+    help: 'Per-provider request templates: [{ providerId, url, method, headers, bodyTemplate, enabled }]. Run "AI Bridge: Capture Request as Template" to make one from a copied cURL. Off unless enabled.',
+  },
+  {
     key: 'aiBridge.features.commit.enabled',
     path: 'features.commit.enabled',
     label: 'Commit messages',

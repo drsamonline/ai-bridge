@@ -385,6 +385,26 @@ export function renderSettingsHtml(opts: RenderOptions): string {
         if (h.matches) row.appendChild(el('span', { class: 'fixed' }, h.matches + ' selector(s) matched'));
         th.appendChild(row);
       });
+      // Batch 9.2: endpoints get their own rows, so a rejected key or a dead
+      // endpoint is visible here rather than only in the Output channel.
+      if (snapshot.endpoints && snapshot.endpoints.length) {
+        th.appendChild(el('div', { class: 'fixed' }, 'Endpoints:'));
+        snapshot.endpoints.forEach(function (e) {
+          var row = el('div', { class: 'health-row' });
+          row.appendChild(
+            el('span', { class: 'dot ' + (e.lastError ? 'red' : e.signedIn ? 'green' : 'yellow') }),
+          );
+          row.appendChild(el('span', { class: 'name' }, e.label));
+          row.appendChild(
+            el('span', { class: 'fixed' }, e.lastError ? 'error' : e.signedIn ? 'signed in' : 'no key'),
+          );
+          row.appendChild(el('span', { class: 'fixed' }, e.models + ' model(s)'));
+          th.appendChild(row);
+          if (e.lastError) {
+            th.appendChild(el('div', { class: 'fixed' }, e.lastError));
+          }
+        });
+      }
       if (snapshot.models && snapshot.models.length) {
         th.appendChild(el('div', { class: 'fixed' }, 'Models:'));
         snapshot.models.forEach(function (m) {

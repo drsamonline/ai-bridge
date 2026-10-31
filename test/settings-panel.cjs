@@ -356,6 +356,11 @@ async function main() {
             { id: 'chatgpt', label: 'chatgpt', ready: true, limited: false, matches: 5 },
             { id: 'claude', label: 'claude', ready: false, limited: true, matches: 0 },
           ],
+          // Batch 9.2: one healthy endpoint and one that failed to reach its host.
+          endpoints: [
+            { id: 'local', label: 'Local', signedIn: true, models: 3, lastError: null },
+            { id: 'dead', label: 'Dead', signedIn: false, models: 0, lastError: 'connect ECONNREFUSED' },
+          ],
           t1: null,
         },
       },
@@ -374,6 +379,14 @@ async function main() {
     assert.match(health[0].dot, /green/);
     assert.match(health[1].dot, /red/);
     assert.match(health[0].text, /5 selector/);
+  });
+
+  const endpointText = await page.evaluate(() => document.body.textContent || '');
+  check('endpoint status renders, including the last error (batch 9.2)', () => {
+    assert.match(endpointText, /Endpoints:/, 'no endpoint block');
+    assert.match(endpointText, /Local/, 'the healthy endpoint is missing');
+    assert.match(endpointText, /3 model/, 'the model count is missing');
+    assert.match(endpointText, /connect ECONNREFUSED/, 'the error is not shown');
   });
 
   // ---- performance sparkline ------------------------------------------

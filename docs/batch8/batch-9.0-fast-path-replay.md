@@ -192,3 +192,38 @@ rather than a one-line extraction gap. Both shapes are read now, and plain-text
 - **The extraction rule is best-effort by design.** A template pointing at a
   stream we did not anticipate still produces text, but it may produce the wrong
   text; the template author is the one who can see that.
+
+---
+
+## 9.2 — capturing a template, and seeing what an endpoint is doing
+
+**Status: landed, tested.** `npm run test:curl` (14/14).
+
+The fast path had no way in: a template had to be assembled by hand from a
+DevTools request, which is why the machinery stayed dormant. Two additions:
+
+**Capture** — `AI Bridge: Capture Request as Template`. Copy the request as cURL,
+run the command, pick the provider, and it is parsed, validated and saved
+disabled. Two deliberate refusals inside `features/curl.ts`:
+
+- **credentials never survive the parse** — `authorization`, `cookie`,
+  `content-length`, `host`, `accept-encoding` and `connection` are dropped, so a
+  copied token cannot become a secret in a settings file. The replay uses the
+  tab's own session, which is the whole point of the rung;
+- **no silent guess about the prompt** — the longest string in the body becomes
+  `{{prompt}}`, and the confirmation shows exactly which path was replaced and
+  what it held. A wrong guess here would send the wrong text forever.
+
+A template is saved **disabled**: it should be enabled after it is seen answering,
+not before.
+
+**Endpoint status** — the Providers tab now lists each endpoint with a dot
+(signed in / no key / error), its model count and its last error. A rejected key
+used to be visible only in the Output channel.
+
+**Windows CI** — a `windows-latest` job builds, bundles, and runs every
+browser-free suite. The CDP suites stay on Linux, where they are known to work;
+adding them to Windows would produce a red run that says nothing about the code.
+
+Not proven: no captured template has been run against a real provider, and the
+Windows job has not completed a first run.

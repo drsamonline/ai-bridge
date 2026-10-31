@@ -2,7 +2,7 @@
   "name": "ai-bridge-vscode",
   "displayName": "AI Bridge",
   "description": "Drive a logged-in web chat AI (ChatGPT, Claude, Gemini, or your own) from inside VS Code. No API keys: the extension talks to the browser tab you are already signed in to.",
-  "version": "0.29.0",
+  "version": "0.30.0",
   "publisher": "ai-bridge",
   "private": true,
   "license": "SEE LICENSE IN LICENSE",
@@ -216,6 +216,10 @@
       {
         "command": "aiBridge.fix",
         "title": "AI Bridge: Fix This Problem"
+      },
+      {
+        "command": "aiBridge.fastpath.capture",
+        "title": "AI Bridge: Capture Request as Template"
       }
     ],
     "configuration": {

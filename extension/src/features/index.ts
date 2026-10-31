@@ -9,3 +9,4 @@
 export * from './routing';
 export * from './service';
 export * from './commit';
+export * from './curl';

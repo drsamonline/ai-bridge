@@ -45,6 +45,17 @@ export interface PanelSnapshot {
   bootBudget?: number;
   /** For the Repo tab's context preview. */
   contextMode?: 'auto' | 'always' | 'off';
+  /**
+   * Batch 9.2 — endpoint status. Makes a rejected key or a dead endpoint visible
+   * in the panel instead of only in the log.
+   */
+  endpoints?: Array<{
+    id: string;
+    label: string;
+    signedIn: boolean;
+    models: number;
+    lastError?: string | null;
+  }>;
   /** §5.9 Router tab: drag reorder (priority), cooldowns, health. */
   router?: Array<{
     id: string;

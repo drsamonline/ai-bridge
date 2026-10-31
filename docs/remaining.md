@@ -1,6 +1,6 @@
 # What is left
 
-**874 checks across 31 suites, all green** — verified locally and re-run by CI on
+**890 checks across 32 suites, all green** — verified locally and re-run by CI on
 every push. (Sum of each suite's own reported total; `compression-bench` writes a
 report instead of counting.)
 
@@ -21,14 +21,17 @@ The batch-8 free-tier line is **complete**: eleven items landed across 0.21.0 �
 ## Open — needs your machine
 
 1. **A provider template.** The fast path is inert for ChatGPT / Claude / Gemini
-   until one exists. [`batch8/capture-a-template.md`](batch8/capture-a-template.md)
-   is the procedure. This is the single highest-value thing left.
+   until one exists. `AI Bridge: Capture Request as Template` now turns a copied
+   cURL into one; [`batch8/capture-a-template.md`](batch8/capture-a-template.md)
+   is the longer procedure. This is the single highest-value thing left.
 2. **Live selectors** for the three web chats — fixtures only so far.
 3. **Editor surfaces** — Copilot rendering, the SCM commit button, the diff view,
    the report file write. Wired and smoke-tested; never seen in a real editor.
 4. **The 10-minute soak** (`npm run soak`) and the 1-hour cap hold.
 5. **Install the `.vsix`** — unsigned, not on the Marketplace.
-6. **Windows** — the `ps`/PowerShell parsers exist; only Linux has run.
+6. **Windows** — a `windows-latest` CI job now builds and runs every browser-free
+   suite. The `ps`/PowerShell parsers and the CDP path are still Linux-only in
+   practice, and the job has not completed a first run.
 
 ## Open — buildable, deliberately not done
 

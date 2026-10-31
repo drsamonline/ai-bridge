@@ -44,3 +44,42 @@ jobs:
           name: batch-evidence
           path: docs/batch-*.md
           if-no-files-found: warn
+
+  # Windows is the platform this project has never run on. This job proves the
+  # part that can be proved without a browser: the TypeScript compiles, the
+  # bundle builds, and every suite that does not drive Chromium passes. The CDP
+  # and fixture-browser suites stay on Linux, where they are known to work —
+  # adding them here would produce a red run that says nothing about the code.
+  windows:
+    name: Windows (build + browser-free suites)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Bundle
+        run: npm run build:bundle
+
+      - name: Browser-free suites
+        shell: bash
+        run: |
+          set -e
+          for suite in \
+            api-openai api-tools api-resilience lm-provider features-routing \
+            features-editor fastpath fastpath-prompt signin settings-model \
+            settings-panel release bundle compress-t0 compress-t1 router \
+            state-t1 state-boot state-guard rotation repo-edit lowend; do
+            echo "=== $suite"
+            node "test/$suite.cjs"
+          done
