@@ -14,6 +14,17 @@ export const LOCK_FILE_NAME = 'lock.json';
 export const LOCK_FILE_MODE = 0o600;
 export const LOCK_DIR_MODE = 0o700;
 
+/**
+ * Batch 9.5 — the local-socket transport.
+ *
+ * The socket's own permissions are the authentication: 0600 on POSIX, and a
+ * named pipe whose DACL admits only the creating user on Windows. That is what
+ * lets the token stop being a file on disk, which is the only thing that made
+ * Windows unsafe to support.
+ */
+export const SOCKET_FILE_NAME = 'bridge.sock';
+export const SOCKET_MODE = 0o600;
+
 /** Handshake request/response correlation id. */
 export const HANDSHAKE_ID = 'handshake';
 

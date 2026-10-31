@@ -124,7 +124,15 @@ export interface Settings {
  * ------------------------------------------------------------------ */
 
 export type BridgeMsg =
-  | { op: 'attach'; port: number; token: string }
+  | {
+      op: 'attach';
+      port: number;
+      /**
+       * Batch 9.5 — only the TCP fallback needs it. A peer that reached the local
+       * socket is already authorised by the socket's own permissions.
+       */
+      token?: string;
+    }
   | { op: 'navigate'; adapterId: string; url: string }
   | { op: 'send'; adapterId: string; text: string }
   | { op: 'observe'; adapterId: string; debounceMs: number }

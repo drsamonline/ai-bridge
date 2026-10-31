@@ -8,6 +8,7 @@
 
 import { EventEmitter } from 'node:events';
 import * as crypto from 'node:crypto';
+import * as net from 'node:net';
 import WebSocket from 'ws';
 import {
   CLOSE_CODES,
@@ -114,14 +115,20 @@ export class BridgeClient extends EventEmitter {
     }
 
     this.lastLock = lock;
-    const url = `ws://${lock.host}:${lock.port}`;
+    // Batch 9.5: prefer the local socket. Reaching it is the authorisation, so no
+    // token is sent — and none has to exist on disk.
+    const viaSocket = typeof lock.socket === 'string' && lock.socket.length > 0;
+    const url = viaSocket ? 'ws://localhost/' : `ws://${lock.host}:${lock.port}`;
     this.emit('connecting', { host: lock.host, port: lock.port, lockPath: path });
-    this.log('info', `dialling ${url}`);
+    this.log('info', viaSocket ? `dialling ${lock.socket}` : `dialling ${url}`);
 
     const ws = new WebSocket(url, {
       handshakeTimeout: this.opts.connectTimeoutMs ?? 5_000,
       perMessageDeflate: false,
       maxPayload: 8 * 1024 * 1024,
+      ...(viaSocket
+        ? { createConnection: () => net.connect(lock.socket as string) }
+        : {}),
     });
     this.ws = ws;
 
@@ -141,7 +148,7 @@ export class BridgeClient extends EventEmitter {
           JSON.stringify({
             op: 'attach',
             port: lock.port,
-            token: lock.token,
+            ...(lock.token ? { token: lock.token } : {}),
             rid: HANDSHAKE_ID,
           } satisfies WireMsg),
         );

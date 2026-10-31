@@ -16,7 +16,10 @@
  */
 
 import { createHash, timingSafeEqual } from 'node:crypto';
+import * as fs from 'node:fs';
+import { createServer } from 'node:http';
 import type { IncomingMessage, Server } from 'node:http';
+import type { Duplex } from 'node:stream';
 import { WebSocket, WebSocketServer } from 'ws';
 import {
   BIND_HOST,
@@ -26,6 +29,8 @@ import {
   HEARTBEAT_MS,
   MAX_PAYLOAD_BYTES,
   PROTOCOL_VERSION,
+  SOCKET_MODE,
+  socketPath,
   isBridgeMsg,
   isControlMsg,
   type ControlEvent,
@@ -69,29 +74,72 @@ export async function startBridgeServer(opts: BridgeServerOptions): Promise<Brid
   const tokenHash = createHash('sha256').update(opts.token).digest();
   const states = new Map<WebSocket, ClientState>();
 
+  // Batch 9.5: the transport is a local socket, and its permissions are the
+  // authorisation — 0600 on POSIX, a user-scoped pipe on Windows. That is what
+  // lets the session token stop being a file on disk.
   const wss = new WebSocketServer({
-    host: BIND_HOST,
-    port: opts.port,
+    noServer: true,
     maxPayload: MAX_PAYLOAD_BYTES,
     perMessageDeflate: false,
     clientTracking: true,
   });
 
+  const socketFile = socketPath();
+  const socketServer = createServer();
+  const tcpServer = createServer();
+
+  const upgradeWith = (viaSocket: boolean) => (
+    req: IncomingMessage,
+    socket: Duplex,
+    head: Buffer,
+  ) => {
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      if (viaSocket) (ws as WebSocket & { viaSocket?: boolean }).viaSocket = true;
+      wss.emit('connection', ws, req);
+    });
+  };
+  socketServer.on('upgrade', upgradeWith(true));
+  tcpServer.on('upgrade', upgradeWith(false));
+
+  // The TCP fallback stays for one release: if the socket path misbehaves on a
+  // machine I cannot test, one environment variable restores the old transport.
+  const useTcp = process.env.AI_BRIDGE_TRANSPORT === 'tcp';
+
+  if (process.platform !== 'win32') {
+    // A bridge that was killed leaves the socket behind, and listen() refuses.
+    try {
+      fs.unlinkSync(socketFile);
+    } catch {
+      /* not there */
+    }
+  }
+
   await new Promise<void>((resolve, reject) => {
-    wss.once('listening', () => resolve());
-    wss.once('error', reject);
+    socketServer.once('error', reject);
+    socketServer.listen(socketFile, () => resolve());
   });
+  if (process.platform !== 'win32') {
+    try {
+      fs.chmodSync(socketFile, SOCKET_MODE);
+    } catch {
+      /* best effort: a filesystem that refuses chmod */
+    }
+  }
 
-  const httpServer = wss.options.server as Server | undefined;
-  const boundPort = (() => {
-    const addr = httpServer?.address();
-    return addr && typeof addr === 'object' ? addr.port : opts.port;
-  })();
+  let boundPort = opts.port;
+  if (useTcp) {
+    await new Promise<void>((resolve, reject) => {
+      tcpServer.once('error', reject);
+      tcpServer.listen(opts.port, BIND_HOST, () => resolve());
+    });
+    const addr = tcpServer.address();
+    boundPort = addr && typeof addr === 'object' ? addr.port : opts.port;
+  }
 
-  log.info(`listening on ws://${BIND_HOST}:${boundPort}`, {
-    protocol: PROTOCOL_VERSION,
-    maxPayload: MAX_PAYLOAD_BYTES,
-  });
+  log.info(
+    useTcp ? `listening on ${socketFile} and ws://${BIND_HOST}:${boundPort}` : `listening on ${socketFile}`,
+    { protocol: PROTOCOL_VERSION, maxPayload: MAX_PAYLOAD_BYTES },
+  );
 
   const tokenOk = (candidate: unknown): boolean => {
     if (typeof candidate !== 'string' || !/^[0-9a-f]{64}$/.test(candidate)) return false;
@@ -122,7 +170,20 @@ export async function startBridgeServer(opts: BridgeServerOptions): Promise<Brid
 
     switch (msg.op) {
       case 'attach':
-        return { note: 'already attached', status: runtime.status() };
+        // The socket file outlives the process otherwise, and the next start would
+  // find it and refuse to listen.
+  const cleanupSocket = () => {
+    try {
+      socketServer.close();
+      tcpServer.close();
+      if (process.platform !== 'win32') fs.unlinkSync(socketFile);
+    } catch {
+      /* already gone */
+    }
+  };
+  process.once('exit', cleanupSocket);
+
+  return { note: 'already attached', status: runtime.status() };
       case 'recycle':
         return runtime.controller.recycle('user');
       case 'navigate':
@@ -205,7 +266,11 @@ export async function startBridgeServer(opts: BridgeServerOptions): Promise<Brid
           return;
         }
         clearTimeout(authTimer);
-        if (!tokenOk((msg as { token?: unknown }).token)) {
+        // Batch 9.5: a peer that reached the socket is already authorised — the
+        // OS refused everyone else. The token is only meaningful on the TCP
+        // fallback, where nothing else distinguishes one local user from another.
+        const viaSocket = (ws as WebSocket & { viaSocket?: boolean }).viaSocket === true;
+        if (!viaSocket && !tokenOk((msg as { token?: unknown }).token)) {
           deny(ws, CLOSE_CODES.UNAUTHORIZED, 'bad-token', 'EAUTH: token mismatch');
           return;
         }
@@ -218,7 +283,11 @@ export async function startBridgeServer(opts: BridgeServerOptions): Promise<Brid
             startedAt,
             uptimeMs: Date.now() - startedAt,
           },
-          tokenFingerprint: createHash('sha256').update(opts.token).digest('hex').slice(0, 12),
+          // Batch 9.5: an empty fingerprint says "no credential was presented",
+          // which is the truth for a socket peer.
+          tokenFingerprint: viaSocket
+            ? ''
+            : createHash('sha256').update(opts.token).digest('hex').slice(0, 12),
           capabilities: ['attach', 'recycle', 'navigate', 'send', 'observe', 'health', 'ctl.*'],
         };
         log.info('handshake OK — token accepted', {

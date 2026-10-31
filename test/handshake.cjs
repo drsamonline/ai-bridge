@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// @platform linux — the bridge's loopback security relies on POSIX file modes
-// (0700 on the lock dir, 0600 on the lock file) and the lock file carries the
-// session token. NTFS cannot express those modes, so the file comes back 0666 and
-// the client correctly refuses to read it: AI Bridge does not start on Windows.
-// See docs/remaining.md. The Windows job skips files carrying this marker.
+// @platform linux — batch 9.5 moved the transport to a local socket and stopped
+// writing the session token to disk, so the *product* now works on Windows. This
+// harness still asserts POSIX file modes (0700 dir, 0600 file and socket), which
+// NTFS cannot express, so it stays Linux-only. See docs/remaining.md. The Windows
+// job skips any file carrying this marker.
 /**
  * Batch 0.1 acceptance harness — headless.
  *
@@ -24,6 +24,7 @@ const assert = require('node:assert');
 const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
+const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
 
@@ -103,13 +104,24 @@ async function main() {
 
   check('lock dir exists with mode 0700', () => assert.strictEqual(dirMode.toString(8), '700'));
   check('lock file exists with mode 0600', () => assert.strictEqual(fileMode.toString(8), '600'));
-  check('lock shape is valid (v/host/port/token/pid)', () => {
+  check('lock shape is valid (v/host/port/socket/pid)', () => {
     const validated = shared.validateLock(raw);
     assert.strictEqual(validated.host, '127.0.0.1');
-    assert.match(validated.token, /^[0-9a-f]{64}$/);
+    assert.ok(validated.socket, 'no socket in the lock');
     assert.strictEqual(validated.port, 47801);
   });
   check('lock mode is world/group inaccessible', () => assert.strictEqual(fileMode & 0o077, 0));
+
+  // ---- 1b. batch 9.5: no credential on disk ----------------------------
+  check('no token is written to the lock file', () => {
+    assert.strictEqual(raw.token, undefined, 'a credential is on disk');
+    assert.ok(!JSON.stringify(raw).includes('token'), 'the word token survives in the file');
+  });
+  const socketFile = raw.socket;
+  check('the socket exists and is owner-only', () => {
+    assert.ok(fs.existsSync(socketFile), `no socket at ${socketFile}`);
+    assert.strictEqual((fs.statSync(socketFile).mode & 0o077), 0, 'socket is reachable by others');
+  });
 
   // ---- 2. handshake through the real client -----------------------------
   const client = new shared.BridgeClient({ lockDir });
@@ -132,31 +144,24 @@ async function main() {
   check('handshake ok', () => assert.strictEqual(handshake.bridge.protocol, 1));
   check('handshake reports the real bridge pid', () =>
     assert.strictEqual(handshake.bridge.pid, child.pid));
-  check('handshake token fingerprint matches lock token', () =>
-    assert.strictEqual(
-      handshake.tokenFingerprint,
-      crypto.createHash('sha256').update(raw.token).digest('hex').slice(0, 12),
-    ));
+  // Batch 9.5: there is no token to fingerprint. Reaching the socket is the
+  // authorisation, so the handshake carries no credential at all.
+  check('the handshake carried no credential', () =>
+    assert.strictEqual(handshake.tokenFingerprint, ''));
   check('client state is "connected"', () => assert.strictEqual(client.state, 'connected'));
 
-  // ---- 3. wrong token ---------------------------------------------------
-  const wrongTokenCode = await new Promise((resolve) => {
-    const ws = new WebSocket(`ws://127.0.0.1:${raw.port}`);
-    ws.on('open', () =>
-      ws.send(JSON.stringify({ op: 'attach', port: raw.port, token: 'a'.repeat(64), rid: 'h' })));
-    ws.on('close', (code) => resolve(code));
-    ws.on('error', () => {});
-    setTimeout(() => {
-      ws.terminate();
-      resolve(-1);
-    }, 4000);
-  });
-  check('wrong token is rejected with close code 4001', () =>
-    assert.strictEqual(wrongTokenCode, 4001));
+  // ---- 3. the socket is the authorisation -------------------------------
+  // A second client over the same socket must be accepted without any token:
+  // that is the whole claim of the transport change.
+  const secondClient = new shared.BridgeClient({ lockDir });
+  const secondHandshake = await secondClient.connect().catch((err) => ({ error: err.message }));
+  check('a second socket client attaches with no credential', () =>
+    assert.strictEqual(secondHandshake?.bridge?.protocol, 1));
+  secondClient.close();
 
   // ---- 4. non-attach first frame ---------------------------------------
   const firstFrameCode = await new Promise((resolve) => {
-    const ws = new WebSocket(`ws://127.0.0.1:${raw.port}`);
+    const ws = new WebSocket('ws://localhost/', { createConnection: () => net.connect(socketFile) });
     ws.on('open', () => ws.send(JSON.stringify({ op: 'health', adapterId: 'chatgpt' })));
     ws.on('close', (code) => resolve(code));
     ws.on('error', () => {});
@@ -187,6 +192,7 @@ async function main() {
   child.kill('SIGTERM');
   await exited;
   check('lock file removed on SIGTERM', () => assert.strictEqual(fs.existsSync(lockFile), false));
+  check('socket removed on SIGTERM', () => assert.strictEqual(fs.existsSync(socketFile), false));
 
   // ---- report -----------------------------------------------------------
   const handshakeProof = extLog.filter((l) => /handshake OK|HANDSHAKE|attach/i.test(l));
@@ -220,7 +226,13 @@ async function main() {
     '## Lock file as written on disk',
     '',
     '```json',
-    JSON.stringify({ ...raw, token: `${raw.token.slice(0, 4)}…${raw.token.slice(-4)} (redacted)` }, null, 2),
+    JSON.stringify(
+      raw.token
+        ? { ...raw, token: `${raw.token.slice(0, 4)}…${raw.token.slice(-4)} (redacted)` }
+        : { ...raw, token: 'none — the socket is the authorisation (9.5)' },
+      null,
+      2,
+    ),
     '```',
     '',
     `Modes: dir 0${dirMode.toString(8)} · file 0${fileMode.toString(8)}`,

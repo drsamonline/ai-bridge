@@ -11,14 +11,28 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { LOCK_DIR_MODE, LOCK_DIR_NAME, LOCK_FILE_MODE, LOCK_FILE_NAME } from './protocol';
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import {
+  LOCK_DIR_MODE,
+  LOCK_DIR_NAME,
+  LOCK_FILE_MODE,
+  LOCK_FILE_NAME,
+  SOCKET_FILE_NAME,
+} from './protocol';
 
 export interface LockFile {
   /** Lock schema version — independent of ProjectState.v and of PROTOCOL_VERSION. */
   v: 1;
   host: '127.0.0.1';
   port: number;
-  token: string;
+  /**
+   * Batch 9.5 — the local socket to dial. When present it is the transport, and
+   * `token` is absent: reaching the socket is the authorisation.
+   */
+  socket?: string;
+  /** Only written when the TCP fallback is explicitly enabled. */
+  token?: string;
   pid: number;
   startedAt: number;
   version: string;
@@ -32,6 +46,21 @@ export function defaultHome(): string {
 
 export function lockDir(home: string = defaultHome()): string {
   return path.join(home, LOCK_DIR_NAME);
+}
+
+/**
+ * The local socket for this home directory.
+ *
+ * POSIX: a file beside the lock, chmod 0600. Windows: a named pipe, whose DACL
+ * restricts it to the creating user — the platform's own equivalent of 0600, and
+ * the reason no token has to be written down there.
+ */
+export function socketPath(home: string = defaultHome()): string {
+  if (process.platform === 'win32') {
+    const tag = createHash('sha1').update(home).digest('hex').slice(0, 10);
+    return `\\\\.\\pipe\\ai-bridge-${tag}`;
+  }
+  return path.join(lockDir(home), SOCKET_FILE_NAME);
 }
 
 export function lockPath(home: string = defaultHome()): string {
@@ -57,6 +86,27 @@ export function ensureLockDir(dir: string = lockDir()): string {
     // Best effort: some filesystems (network mounts) refuse chmod.
   }
   return dir;
+}
+
+/**
+ * Batch 9.5 — on Windows, restrict the file to the current user.
+ *
+ * NTFS cannot express 0600, so the POSIX mode is advisory there and the ACL is
+ * the real control. Best effort: `icacls` may be absent, and a failure here must
+ * not stop the bridge from starting.
+ */
+function restrictToOwner(target: string): void {
+  if (process.platform !== 'win32') return;
+  const user = process.env.USERNAME;
+  if (!user) return;
+  try {
+    execFileSync('icacls', [target, '/inheritance:r', '/grant:r', `${user}:F`], {
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+  } catch {
+    /* best effort — the socket transport does not depend on it */
+  }
 }
 
 /** Atomically write the lock file with mode 0600. */
@@ -115,12 +165,6 @@ export function readLock(dir: string = lockDir()): ReadLockResult {
   }
 
   const mode = stat.mode & 0o777;
-  if ((mode & 0o077) !== 0) {
-    throw new LockError(
-      `lock file mode is 0${mode.toString(8)} — refusing to read; expected 0600`,
-      'EBADMODE',
-    );
-  }
 
   let parsed: unknown;
   try {
@@ -130,6 +174,17 @@ export function readLock(dir: string = lockDir()): ReadLockResult {
   }
 
   const lock = validateLock(parsed);
+
+  // Batch 9.5: a permissive mode is only a problem when the file still carries a
+  // credential. With a socket transport the file is discovery data — a host, a
+  // path, a pid — and refusing it is what stopped Windows from working at all.
+  if ((mode & 0o077) !== 0 && !lock.socket) {
+    throw new LockError(
+      `lock file mode is 0${mode.toString(8)} — refusing to read a token from it; expected 0600`,
+      'EBADMODE',
+    );
+  }
+
   return { lock, mode, path: target };
 }
 
@@ -143,8 +198,12 @@ export function validateLock(value: unknown): LockFile {
   if (o.host !== '127.0.0.1') throw bad(`host must be 127.0.0.1, got ${String(o.host)}`);
   if (typeof o.port !== 'number' || !Number.isInteger(o.port) || o.port < 1 || o.port > 65535)
     throw bad(`port invalid: ${String(o.port)}`);
-  if (typeof o.token !== 'string' || !/^[0-9a-f]{64}$/.test(o.token))
-    throw bad('token must be 64 hex chars');
+  // Batch 9.5: a socket-bearing lock needs no token — the socket's permissions
+  // are the authorisation. A lock with neither cannot be dialled safely.
+  const hasSocket = typeof o.socket === 'string' && o.socket.length > 0;
+  const hasToken = typeof o.token === 'string' && /^[0-9a-f]{64}$/.test(o.token);
+  if (!hasSocket && !hasToken) throw bad('needs a socket, or a 64-hex token');
+  if (o.token !== undefined && !hasToken) throw bad('token must be 64 hex chars');
   if (typeof o.pid !== 'number' || !Number.isInteger(o.pid) || o.pid < 1)
     throw bad(`pid invalid: ${String(o.pid)}`);
   if (typeof o.startedAt !== 'number') throw bad('startedAt must be a number');

@@ -20,6 +20,7 @@ import {
   lockDir,
   lockPath,
   readLock,
+  socketPath,
   writeLock,
   type LockFile,
 } from '@ai-bridge/shared';
@@ -123,11 +124,17 @@ async function main(): Promise<void> {
     process.exit(4);
   }
 
+  const useTcp = process.env.AI_BRIDGE_TRANSPORT === 'tcp';
   const lock: LockFile = {
     v: 1,
     host: '127.0.0.1',
     port: server.port,
-    token,
+    // Batch 9.5: the socket is the transport and its permissions are the
+    // authorisation, so no credential is written down. The token survives only
+    // for the TCP fallback, where nothing else separates one local user from
+    // another.
+    socket: socketPath(home),
+    ...(useTcp ? { token } : {}),
     pid: process.pid,
     startedAt,
     version: VERSION,
@@ -162,6 +169,16 @@ async function main(): Promise<void> {
       log.warn(`close error: ${(err as Error).message}`);
     }
     if (clearLock(process.pid, dir)) log.info('lock file removed');
+    // Batch 9.5: the socket outlives the process otherwise, and the next start
+    // would find a dead one. Windows pipes vanish with their last handle.
+    if (process.platform !== 'win32') {
+      try {
+        fs.unlinkSync(socketPath(home));
+        log.info('socket removed');
+      } catch {
+        /* already gone */
+      }
+    }
     else log.warn('lock file left in place (not ours or already gone)');
     process.exit(0);
   };
