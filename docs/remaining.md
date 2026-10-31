@@ -24,3 +24,18 @@
 | **Windows** | the `ps`/PowerShell parsers exist but only Linux has run; more untested branches would add false confidence |
 | **`ChatGPT (2 left)`** | no provider exposes a reliable remaining-count; a cooldown is shown instead |
 | **T1 / T2 quality** | both are built, guarded and tested for safety, but never run against a real model — how much they actually save is unknown. T0's savings are measured: 17% overall, 0% on terse prompts, 37% on repo bundles |
+
+## Batch 8 — the free-tier line
+
+The roadmap is in [`batch8/roadmap.md`](batch8/roadmap.md). It changes two items
+on this page.
+
+- **Live selectors** (open item 1) stops being a blocker in batch 9.0: the fast
+  path goes first and the DOM adapter becomes the fallback rung, which is a
+  better answer than testing the selectors harder.
+- **`ChatGPT (2 left)`** becomes honest for API endpoints in batch 8.0 — they
+  report `usage` in the stream, so a remaining count is real rather than guessed.
+  The DOM path keeps the cooldown.
+
+Batch 8.0 is landed and tested (`npm run test:api`, 32/32). 8.1–9.0 are specified
+and blocked on their predecessors.

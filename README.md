@@ -143,6 +143,27 @@ names a file, a symbol or a code term, which avoids a 500–900 token bundle on 
 
 <br />
 
+## Free-tier API endpoints
+
+Besides the three web chats, the bridge can talk to any endpoint that speaks
+`POST {baseUrl}/chat/completions` — OpenRouter's free pool, Groq, Google AI
+Studio, Cerebras, GitHub Models, or a local Ollama. These need no browser and no
+selectors, so they cannot break when a site changes its page.
+
+- **Model discovery** from `GET {baseUrl}/models`, or a pinned list when the
+  catalogue is hundreds of models long.
+- **Structural tool calls** where the endpoint supports them; the prompt protocol
+  where it does not, scrubbed out of the answer either way.
+- **Real usage numbers.** These endpoints report prompt and completion tokens, so
+  a remaining count is measured rather than guessed.
+- **Keys stay off disk.** They live in memory for the life of the bridge, or in
+  `AI_BRIDGE_API_KEY_<ID>`.
+
+Configured over the control plane (`ctl.api.providers.set`); the batch records,
+including what was taken from where, are in [`docs/batch8/`](docs/batch8/). Two
+suites cover it: `npm run test:api` (32 checks) and `npm run test:tools`
+(34 checks).
+
 ## What is actually proven
 
 This is an experimental project and it would be dishonest to imply otherwise.

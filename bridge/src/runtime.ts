@@ -24,6 +24,12 @@ import { RamMonitor } from './ram/monitor';
 import { Watchdog } from './watchdog';
 import { AdapterRegistry } from './adapters/registry';
 import { Router, type ProviderSpec } from './router/router';
+import { ApiRegistry, type ApiMessage, type FetchLike } from './api';
+import {
+  assembleNative,
+  buildToolsSystemPrompt,
+  type ResponseSink,
+} from './protocol';
 import { composeBoot, deltaLineCount } from './bootTransport';
 import { DOM_SHAPE_SNIPPET } from '@ai-bridge/shared';
 import { isStreamingAdapter } from './adapters/types';
@@ -50,12 +56,23 @@ export interface RuntimeOptions {
   blockRatio?: number;
   maxTurns?: number;
   idleMs?: number;
+  /**
+   * Batch 8.1 — the transport's `fetch`, injectable. A host may want to wrap it
+   * (a proxy, a retry policy), and the acceptance harness needs to drive it
+   * without depending on undici's WASM support.
+   */
+  apiFetchImpl?: FetchLike;
 }
 
 export class BridgeRuntime {
   readonly controller: CdpController;
   readonly monitor: RamMonitor;
   readonly watchdog: Watchdog;
+  /**
+   * Batch 8.0 — OpenAI-compatible endpoints. A sibling of the DOM adapters, not
+   * a replacement: nothing here launches a browser or touches a page.
+   */
+  readonly api: ApiRegistry;
   readonly adapters: AdapterRegistry;
   readonly router: Router;
   readonly bus = new EventEmitter();
@@ -94,6 +111,13 @@ export class BridgeRuntime {
       log: log.child('watchdog'),
       warnRatio: opts.warnRatio ?? 0.8,
       blockRatio: opts.blockRatio ?? 1.0,
+    });
+
+    // Batch 8.0: endpoints arrive over `ctl.api.*`; no launch, no page, no key
+    // on disk. Failures are logged, never thrown at the caller of setProviders.
+    this.api = new ApiRegistry({
+      log: (message) => log.debug?.(message),
+      ...(opts.apiFetchImpl ? { fetchImpl: opts.apiFetchImpl } : {}),
     });
 
     this.wire();
@@ -615,6 +639,99 @@ export class BridgeRuntime {
           }
         }
         return { warmed, candidates: candidates.map((c) => c.id) };
+      }
+      /* ------------------------------------------------------- batch 8.0 */
+      case 'ctl.api.providers.set': {
+        // Endpoints from configuration, validated one by one so a bad entry is
+        // reported by id rather than failing the whole set.
+        const result = this.api.setProviders(msg.providers ?? [], msg.keys ?? {});
+        log.info(
+          `api: ${result.accepted.length} endpoint(s) accepted, ${result.rejected.length} rejected`,
+          { accepted: result.accepted },
+        );
+        return { ...result, providers: this.api.statuses() };
+      }
+      case 'ctl.api.models': {
+        // A pinned catalogue is never fetched; an endpoint that fails keeps its
+        // previous models and reports `lastError` on its status instead.
+        const models = await this.api.refresh(msg.providerId);
+        return { models, providers: this.api.statuses() };
+      }
+      case 'ctl.api.status':
+        return { providers: this.api.statuses(), models: this.api.modelList() };
+      case 'ctl.api.prompt': {
+        // Batch 8.1: one endpoint answer, assembled. The three channels a chat
+        // host needs — text, reasoning, tool calls — leave here as events, so a
+        // panel never has to know how a call is spelled.
+        const startedAt = Date.now();
+        const push = (kind: ControlEventKind, data: unknown) =>
+          this.bus.emit('event', {
+            op: 'ctl.event',
+            kind,
+            t: Date.now(),
+            data,
+          } satisfies ControlEvent);
+
+        const model = msg.model;
+        if (!this.api.resolve(model)) {
+          throw new Error(`ECONFIG: unknown model "${model}"`);
+        }
+
+        const tools = msg.tools ?? [];
+        const promptToolProtocol = msg.promptToolProtocol === true;
+        // The protocol is only written into the prompt when the endpoint cannot
+        // take tools structurally — otherwise it would duplicate the schema.
+        const system =
+          promptToolProtocol && tools.length > 0 ? buildToolsSystemPrompt(tools) : '';
+        const messages: ApiMessage[] = [
+          ...(system ? [{ role: 'system' as const, content: system }] : []),
+          ...(msg.messages ?? []).map((message) => ({
+            role: message.role as ApiMessage['role'],
+            content: message.content,
+            ...(message.toolCallId ? { toolCallId: message.toolCallId } : {}),
+          })),
+        ];
+
+        push('stream.start', { model, phase: 'prompt', promptToolProtocol });
+
+        const sink: ResponseSink = {
+          text: (part) =>
+            push('stream.delta', { model, text: part, elapsedMs: Date.now() - startedAt }),
+          thinking: (part) =>
+            push('stream.thinking', { model, text: part, elapsedMs: Date.now() - startedAt }),
+          toolCall: (call) =>
+            push('tool.call', { model, call, elapsedMs: Date.now() - startedAt }),
+          usage: (promptTokens, completionTokens) =>
+            push('api.usage', { model, promptTokens, completionTokens }),
+        };
+
+        const assembled = await assembleNative(
+          this.api.stream({
+            model,
+            messages,
+            ...(tools.length ? { tools } : {}),
+            ...(msg.maxTokens !== undefined ? { maxTokens: msg.maxTokens } : {}),
+            ...(msg.temperature !== undefined ? { temperature: msg.temperature } : {}),
+          }),
+          sink,
+          {
+            tools,
+            promptToolProtocol,
+            onDrop: (reason, chars) =>
+              log.debug?.(`api prompt: dropped ${chars} chars of transcript echo (${reason})`),
+          },
+        );
+
+        const totalMs = Date.now() - startedAt;
+        push('stream.end', { model, totalMs, ...assembled });
+        log.info('api prompt assembled', {
+          model,
+          textChars: assembled.textChars,
+          thinkingChars: assembled.thinkingChars,
+          toolCalls: assembled.toolCalls.length,
+          totalMs,
+        });
+        return { model, totalMs, ...assembled };
       }
       case 'ctl.health':
         return this.health(msg.adapterId);

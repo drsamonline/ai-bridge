@@ -155,7 +155,38 @@ export type ControlMsg =
       cooldownMs?: number;
       enabled?: boolean;
     }
-  | { op: 'ctl.router.prewarm' };
+  | { op: 'ctl.router.prewarm' }
+  /* ------------------------------------------------------------------ *
+   * Batch 8 — OpenAI-compatible API endpoints.
+   *
+   * These live here, not in §4's `BridgeMsg`, for the reason this union
+   * exists at all: a new operation must never collide with a frozen one.
+   * `Settings` is not widened either — endpoint config travels in the
+   * payload, and keys are never persisted by the bridge.
+   * ------------------------------------------------------------------ */
+  | {
+      op: 'ctl.api.providers.set';
+      providers: unknown[];
+      /** Held in memory only. Durable storage is the extension's job (8.0b). */
+      keys?: Record<string, string>;
+    }
+  | { op: 'ctl.api.models'; providerId?: string }
+  | { op: 'ctl.api.status' }
+  /**
+   * Batch 8.1 — one assembled answer from an API endpoint: text and reasoning
+   * stream as events, a tool call arrives whole with typed arguments.
+   */
+  | {
+      op: 'ctl.api.prompt';
+      /** Namespaced model id: `custom:<providerId>/<model>`. */
+      model: string;
+      messages: Array<{ role: string; content: string; toolCallId?: string }>;
+      tools?: Array<{ name: string; description?: string; parameters?: Record<string, unknown> }>;
+      /** Tools travel as prompt text when the endpoint has no tools API. */
+      promptToolProtocol?: boolean;
+      maxTokens?: number;
+      temperature?: number;
+    };
 
 export type ControlEventKind =
   | 'attached'
@@ -171,6 +202,11 @@ export type ControlEventKind =
   | 'stream.start'
   | 'stream.delta'
   | 'stream.end'
+  /* Batch 8.1 — an assembled answer carries more than one channel. */
+  | 'stream.thinking'
+  | 'tool.call'
+  | 'tool.result'
+  | 'api.usage'
   | 'adapter.health'
   | 'provider.switch'
   | 'boot.injected';
