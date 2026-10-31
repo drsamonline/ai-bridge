@@ -41,6 +41,31 @@ jobs:
           test -f docs/index.html || (echo "docs/index.html missing" && exit 1)
           test -f docs/screenshots/chat-panel.png || (echo "screenshot missing" && exit 1)
           grep -q 'screenshots/chat-panel.png' docs/index.html
+          # `docs/` IS the site root, so every relative asset the page references
+          # must exist inside it. A path that escapes the root — ../extension/...
+          # — resolves to nothing on Pages, which is how the icon broke.
+          # A `../` asset resolves on disk but escapes the artifact, so existence
+          # is not enough — the path itself has to stay inside the root. That is
+          # the difference between `test -f` passing locally and a 404 on Pages.
+          missing=0
+          for asset in $(grep -oE '(src|href)="[^"]+"' docs/index.html \
+            | sed -E 's/.*="([^"]+)"/\1/' \
+            | grep -vE '^(https?:|#|mailto:)' \
+            | sort -u); do
+            clean="${asset%%\?*}"
+            case "$clean" in
+              *..*|/*)
+                echo "asset escapes the site root: $asset"
+                missing=1
+                continue
+                ;;
+            esac
+            if [ ! -f "docs/$clean" ]; then
+              echo "missing asset: $asset (expected docs/$clean)"
+              missing=1
+            fi
+          done
+          test "$missing" -eq 0
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
