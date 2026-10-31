@@ -37,7 +37,16 @@ import {
   buildToolsSystemPrompt,
   type ResponseSink,
 } from './protocol';
-import { RungPolicy, validateTemplate, type FastPathTemplate } from './fastpath';
+import {
+  ChallengeError,
+  RungPolicy,
+  attemptFast,
+  renderTemplate,
+  replayInPage,
+  validateTemplate,
+  type FastPathTemplate,
+  type Rung,
+} from './fastpath';
 import { composeBoot, deltaLineCount } from './bootTransport';
 import { DOM_SHAPE_SNIPPET } from '@ai-bridge/shared';
 import { isStreamingAdapter } from './adapters/types';
@@ -106,6 +115,8 @@ export class BridgeRuntime {
    */
   readonly rungs = new RungPolicy();
   private readonly fastpath = new Map<string, FastPathTemplate>();
+  /** Batch 9.0b — the same injectable fetch the API transport uses. */
+  private readonly fastFetch: FetchLike;
   readonly adapters: AdapterRegistry;
   readonly router: Router;
   readonly bus = new EventEmitter();
@@ -159,6 +170,7 @@ export class BridgeRuntime {
       backoff: 'exponential',
       log: (level, message) => log[level](`api ${message}`),
     });
+    this.fastFetch = opts.apiFetchImpl ?? fetch;
 
     this.wire();
   }
@@ -306,9 +318,27 @@ export class BridgeRuntime {
     let currentId: string | null = null;
     let page = this.controller.activePage;
 
+    // A rung that already fell through for this provider is not re-tried when
+    // the router retries the prompt: the endpoint's answer will not have changed
+    // in the intervening milliseconds, and each retry would cost a request.
+    const exhausted = new Set<string>();
+
     for (const adapterId of chain) {
-      const adapter = await this.adapters.get(adapterId);
       const isSwitch = currentId !== null && currentId !== adapterId;
+
+      // Batch 9.0b: the rungs above the DOM adapter, when this provider has an
+      // enabled template. No template means the DOM path exactly as before —
+      // which is every provider by default.
+      //
+      // Tried BEFORE the adapter lookup, because a template can name a provider
+      // this build has no adapter for: the template is the definition then.
+      const template = this.fastpath.get(adapterId);
+      if (template?.enabled) {
+        const answered = await this.tryRungs(adapterId, template, msg, push, exhausted);
+        if (answered) return answered;
+      }
+
+      const adapter = await this.adapters.get(adapterId);
 
       try {
         if (isSwitch || !page) {
@@ -433,6 +463,114 @@ export class BridgeRuntime {
     }
 
     throw lastError ?? new Error('ENOANSWER: no provider produced an answer');
+  }
+
+  /**
+   * Batch 9.0b — try the rungs above the DOM adapter for one provider.
+   *
+   * Returns a result when a rung answered, or `null` when the caller should run
+   * the DOM path. The cascade is the point: a challenge on the fast rung is not
+   * an error, it is a reason to try the next one.
+   */
+  private async tryRungs(
+    adapterId: string,
+    template: FastPathTemplate,
+    msg: { text: string },
+    push: (kind: ControlEventKind, data: unknown) => void,
+    exhausted: Set<string>,
+  ): Promise<(PromptResult & { switched: SwitchRecord[] }) | null> {
+    const log = this.opts.log;
+    const page = this.controller.activePage;
+    const candidates: Rung[] = page ? ['fast', 'replay', 'dom'] : ['fast', 'dom'];
+    const available = candidates.filter((rung) => !exhausted.has(`${adapterId}:${rung}`));
+    const preferred = this.rungs.choose(adapterId, available);
+    if (!preferred) return null;
+
+    // The remembered rung first, then the rest in cost order.
+    const order = [preferred, ...available.filter((rung) => rung !== preferred)];
+    const startedAt = Date.now();
+    let firstTokenMs: number | null = null;
+
+    for (const rung of order) {
+      if (rung === 'dom') return null;
+
+      const parts: string[] = [];
+      push('stream.start', {
+        adapterId,
+        phase: 'prompt',
+        rung,
+        prompt: msg.text.slice(0, 200),
+      });
+
+      try {
+        const source =
+          rung === 'fast'
+            ? attemptFast(template, { prompt: msg.text }, { fetchImpl: this.fastFetch })
+            : replayInPage(page as never, {
+                url: template.url,
+                method: template.method ?? 'POST',
+                headers: { 'Content-Type': 'application/json', ...(template.headers ?? {}) },
+                body: renderTemplate(template.bodyTemplate, { prompt: msg.text }),
+              });
+
+        for await (const chunk of source) {
+          if (firstTokenMs === null) firstTokenMs = Date.now() - startedAt;
+          parts.push(chunk);
+          push('stream.delta', {
+            adapterId,
+            rung,
+            text: chunk,
+            elapsedMs: Date.now() - startedAt,
+          });
+        }
+
+        const text = parts.join('');
+        if (!text.trim()) throw new Error('EFAST: the fast path returned nothing');
+
+        const totalMs = Date.now() - startedAt;
+        this.rungs.record(adapterId, rung);
+        this.router.markSuccess(adapterId);
+        push('stream.end', {
+          adapterId,
+          rung,
+          totalMs,
+          firstTokenMs,
+          chars: text.length,
+        });
+        log.info(`fastpath: ${adapterId} answered on the ${rung} rung`, {
+          firstTokenMs,
+          totalMs,
+          chars: text.length,
+        });
+
+        return {
+          adapterId,
+          text,
+          firstTokenMs,
+          totalMs,
+          // The stream's own terminator settled it, which is what 'sentinel'
+          // means everywhere else in this file.
+          settledBy: 'sentinel',
+          tabId: null,
+          turns: this.controller.status().turns,
+          // Nothing was switched away from: this provider answered.
+          switched: [],
+        };
+      } catch (err) {
+        // A challenge is a reason to move down a rung, not a failure of the
+        // provider — and not something the user should see.
+        const challenge = err instanceof ChallengeError ? err.detection.verdict : null;
+        const error = err instanceof Error ? err : new Error(String(err));
+        this.rungs.recordFallThrough(adapterId, rung);
+        exhausted.add(`${adapterId}:${rung}`);
+        push('stream.end', { adapterId, rung, failed: error.name });
+        log.warn(
+          `fastpath: ${adapterId} ${rung} did not answer${challenge ? ` (${challenge})` : ''} — ${error.message}`,
+        );
+      }
+    }
+
+    return null;
   }
 
   /** Send one message and observe the settled answer, emitting stream events. */

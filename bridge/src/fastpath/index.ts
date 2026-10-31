@@ -12,3 +12,4 @@ export * from './types';
 export * from './detect';
 export * from './policy';
 export * from './replay';
+export * from './attempt';

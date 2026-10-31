@@ -144,3 +144,51 @@ the fingerprint are already there. `replayInPage` sends nothing of its own — n
 `test:fastpath` 25/25; handshake 12/12, router 35/35, extension-smoke 40/40,
 release 26/26, api-tools 34/34, lm-provider 19/19, features-routing 27/27,
 contract 31/31 (one flaky `ENOTEMPTY` profile cleanup, clean on retry).
+
+---
+
+## 9.0b — the rungs inside `prompt()`
+
+**Status: landed, tested.** Harness: `npm run test:rungs` (11/11).
+
+### What landed
+
+`bridge/src/fastpath/attempt.ts` and a cascade in `BridgeRuntime.prompt()`:
+
+```
+prompt ──► template enabled? ──► fast ──► replay ──► dom (unchanged)
+                                  │         │
+                              challenge ─────┘
+```
+
+- **A provider with no enabled template never reaches the cascade**, so the DOM
+  path is byte-for-byte what it was. That is every provider by default, and the
+  DOM-path suites (chatgpt-fixture 21/21, models 20/20, contract 31/31,
+  router 35/35, rotation 26/26) confirm it.
+- **A challenge is not an error.** It records a fall-through and moves down a
+  rung; the user sees one answer and one prompt.
+- **A rung that fell through is not re-tried** when the router retries the prompt.
+  The harness caught this: without it a challenged endpoint was hit three times
+  per prompt, once per retry, for an answer that could not have changed.
+- **The template is tried before the adapter lookup**, so a template can name a
+  provider this build has no adapter for — the template is the definition then.
+
+### A bug the harness found, and what it looked like
+
+`extractTextFromEvent` read the OpenAI shape (`choices[0].delta.content`) and
+missed a top-level `{"delta":{"text":…}}`. Every chunk of such a stream was
+dropped, the fast rung produced nothing, and the failure surfaced as
+`EFAST: the fast path returned nothing` — which reads like a broken endpoint
+rather than a one-line extraction gap. Both shapes are read now, and plain-text
+`data:` payloads pass through unchanged.
+
+### Not proven
+
+- **The replay rung has never run in this harness.** With no tab attached the
+  cascade is `fast → dom`; `replayInPage` is covered by 9.0's own checks against
+  installed globals, but the two together are not.
+- **No real provider has answered on the fast rung.** Every check runs against a
+  loopback server that speaks a shape we wrote ourselves.
+- **The extraction rule is best-effort by design.** A template pointing at a
+  stream we did not anticipate still produces text, but it may produce the wrong
+  text; the template author is the one who can see that.

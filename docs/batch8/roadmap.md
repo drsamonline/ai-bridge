@@ -1,6 +1,6 @@
 # Roadmap 8 — the free-tier productivity line
 
-**Status: open. Every batch landed and tested. 9.0 ships the machinery; no provider template is included, and wiring the rungs into `prompt()` is 9.0b.**
+**Status: open. Every batch landed and tested, including 9.0b — the rungs are wired into `prompt()`. No provider template is included.**
 
 Batches 0.1–7.3 built a bridge that drives a logged-in web chat over CDP, with
 three adapters, a router, project state, compression, rotation and a watchdog.
