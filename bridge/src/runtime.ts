@@ -783,15 +783,18 @@ export class BridgeRuntime {
 
         push('stream.start', { model, requestId, phase: 'prompt', promptToolProtocol });
 
+        // `requestId` rides on every delta (batch 8.2), so a second consumer of
+        // the same model — Copilot Chat beside our panel — can pick out its own
+        // stream instead of rendering someone else's.
         const sink: ResponseSink = {
           text: (part) =>
-            push('stream.delta', { model, text: part, elapsedMs: Date.now() - startedAt }),
+            push('stream.delta', { model, requestId, text: part, elapsedMs: Date.now() - startedAt }),
           thinking: (part) =>
-            push('stream.thinking', { model, text: part, elapsedMs: Date.now() - startedAt }),
+            push('stream.thinking', { model, requestId, text: part, elapsedMs: Date.now() - startedAt }),
           toolCall: (call) =>
-            push('tool.call', { model, call, elapsedMs: Date.now() - startedAt }),
+            push('tool.call', { model, requestId, call, elapsedMs: Date.now() - startedAt }),
           usage: (promptTokens, completionTokens) =>
-            push('api.usage', { model, promptTokens, completionTokens }),
+            push('api.usage', { model, requestId, promptTokens, completionTokens }),
         };
 
         try {

@@ -11,6 +11,7 @@
 
 import * as os from 'node:os';
 import * as vscode from 'vscode';
+import { registerAiBridgeLanguageModel, type LmClient } from './lm';
 import {
   BridgeClient,
   type BrowserStatus,
@@ -1572,6 +1573,15 @@ export function activate(context: vscode.ExtensionContext): void {
       return `lock unavailable: ${(err as Error).message}`;
     }
   };
+
+  // Batch 8.2 — appear in Copilot Chat, where this VS Code can host a provider.
+  // On 1.90–1.103 there is no such API and this returns undefined; the extension
+  // then behaves exactly as it did before the batch.
+  const lmRegistration = registerAiBridgeLanguageModel({
+    client: () => client as unknown as LmClient,
+    log: (message) => write('info', message),
+  });
+  if (lmRegistration) context.subscriptions.push(lmRegistration);
 
   context.subscriptions.push(
     output,

@@ -67,3 +67,76 @@ gate: with the API absent the extension loads and registers nothing
 - Copilot can be active at the same time as our panel; two streams to the same
   tab would fight. The bridge serialises per tab already — this batch must not
   bypass that.
+
+## Result
+
+**Status: landed, tested at the provider boundary.** Harness: `npm run test:lm`
+(19/19).
+
+### The decision, taken
+
+**Option 2 — runtime-gate.** `engines.vscode` stays at `^1.90`. The provider is
+registered only where `vscode.lm.registerLanguageModelChatProvider` exists, so
+1.90–1.103 loads the extension exactly as before and Copilot support appears as
+an upgrade bonus rather than a new requirement. The README's compatibility
+promise is unchanged.
+
+Two consequences worth stating:
+
+- The types are declared locally in `extension/src/lm/types.ts` rather than taken
+  from a newer `@types/vscode`. Nothing compiles against a type that may be
+  absent at runtime, and the gate is the only place that decides.
+- `LanguageModelThinkingPart` is feature-detected separately from the provider
+  API: when it is missing the provider is built without a reasoning channel
+  instead of reporting a part the editor cannot render.
+
+### What landed
+
+| Piece | Detail |
+|---|---|
+| `contributes.languageModelChatProviders` | vendor `ai-bridge`, display name `AI Bridge` — six lines in the manifest |
+| `extension/src/lm/types.ts` | structural LM types, no `@types/vscode` bump |
+| `extension/src/lm/provider.ts` | host-free: model list, message conversion, native/prompt tool choice, part ordering, token estimate |
+| `extension/src/lm/register.ts` | the `vscode` glue and the runtime gate |
+| `bridge/src/runtime.ts` | `requestId` now rides on every stream delta, so Copilot beside our panel can pick out its own stream |
+| `test/lm-provider.cjs` | 19 checks |
+
+Model listing is honest about what it knows: each API model is its own entry
+(`custom:<provider>/<model>`), and each web chat is **one** entry labelled
+`ChatGPT (tab)` — because which model answers is whatever that tab has selected,
+and inventing a name for it would be a lie the picker tells.
+
+Tool calling is offered per model: `capabilities.toolCalling` is false for a DOM
+model, because `ctl.prompt` takes text only. Copilot will not offer tools where
+there is no channel for them.
+
+### Not proven — and you should know it
+
+**The provider has never run inside a real VS Code with Copilot Chat.** The
+harness drives the provider directly with fake parts and a fake bridge; it proves
+the logic, the part ordering and the tool decision, not that Copilot renders
+them. This is the same honesty `docs/remaining.md` applies to the live selectors:
+the boundary is tested, the integration is not.
+
+Also open:
+
+- **Images.** `imageInput` is not offered; a screenshot in Copilot Chat will not
+  reach the model.
+- **DOM streaming.** A web-chat answer is settled by `ctl.prompt` before it is
+  returned, so it arrives in one part rather than token by token. The API path
+  streams properly.
+- **Tool results back to the model.** Still 8.1b — the loop is one-way today.
+
+### Files touched
+
+```
+extension/package.json                   +languageModelChatProviders
+extension/src/extension.ts               registration behind the gate
+extension/src/lm/{types,provider,register,index}.ts   new
+bridge/src/runtime.ts                    requestId on stream deltas
+test/lm-provider.cjs                     new (19 checks)
+package.json                             +test:lm, added to test:all
+```
+
+`engines.vscode` is unchanged at `^1.90`. The bridge, the adapters and the DOM
+path are untouched.
