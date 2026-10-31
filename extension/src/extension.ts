@@ -20,6 +20,7 @@ import {
   type RoutableModel,
   type ServiceBridge,
 } from './features';
+import { FixProvider, SuggestProvider, runFix, type EditorOptions } from './features/editor';
 import {
   BridgeClient,
   type BrowserStatus,
@@ -1665,6 +1666,24 @@ export function activate(context: vscode.ExtensionContext): void {
     return false;
   };
 
+  /* ---------------------------------------------------------- batch 8.3b */
+
+  const editorOptions: EditorOptions = {
+    bridge: serviceBridge,
+    models: routableModels,
+    setting: (feature) =>
+      vscode.workspace
+        .getConfiguration('aiBridge')
+        .get<string>(`features.${feature}.model`, 'auto'),
+    enabled: (feature) =>
+      vscode.workspace
+        .getConfiguration('aiBridge')
+        .get<boolean>(`features.${feature}.enabled`, feature === 'fix'),
+    log: (message) => write('info', message),
+  };
+
+  const suggestProvider = new SuggestProvider(editorOptions);
+
   // Batch 8.2 — appear in Copilot Chat, where this VS Code can host a provider.
   // On 1.90–1.103 there is no such API and this returns undefined; the extension
   // then behaves exactly as it did before the batch.
@@ -1685,6 +1704,46 @@ export function activate(context: vscode.ExtensionContext): void {
     { dispose: () => void stateManager?.dispose() },
     { dispose: () => void compressor?.stop() },
 
+    vscode.languages.registerInlineCompletionItemProvider({ pattern: '**' }, suggestProvider),
+    vscode.languages.registerCodeActionsProvider(
+      { scheme: 'file' },
+      new FixProvider(editorOptions),
+      { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] },
+    ),
+    vscode.commands.registerCommand('aiBridge.suggest', async () => {
+      if (phase !== 'ready') {
+        void vscode.window.showWarningMessage('AI Bridge: start the bridge first.');
+        return;
+      }
+      if (
+        !vscode.workspace
+          .getConfiguration('aiBridge')
+          .get<boolean>('features.suggestions.enabled', false)
+      ) {
+        void vscode.window.showInformationMessage(
+          'AI Bridge: set aiBridge.features.suggestions.enabled to use suggestions.',
+        );
+        return;
+      }
+      suggestProvider.arm();
+      await vscode.commands.executeCommand('editor.action.inlineSuggest.trigger');
+    }),
+    vscode.commands.registerCommand(
+      'aiBridge.fix',
+      async (uri: vscode.Uri, diagnostic: vscode.Diagnostic) => {
+        if (phase !== 'ready') {
+          void vscode.window.showWarningMessage('AI Bridge: start the bridge first.');
+          return;
+        }
+        try {
+          await runFix(editorOptions, uri, diagnostic);
+        } catch (err) {
+          const reason = (err as Error).message;
+          write('error', `fix failed: ${reason}`);
+          void vscode.window.showErrorMessage(`AI Bridge: ${reason}`);
+        }
+      },
+    ),
     vscode.commands.registerCommand('aiBridge.commit.message', async () => {
       const folder = vscode.workspace.workspaceFolders?.[0];
       if (!folder) {

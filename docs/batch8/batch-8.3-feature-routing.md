@@ -123,3 +123,57 @@ Both are consumers of `askFeature`, which is tested and waiting for them.
 `test:features` 27/27, and the wider line unchanged: extension-smoke 40/40,
 release 26/26, bundle 5/5, settings-panel 17/17, panel-virtual 29/29,
 lm-provider 19/19, api-tools 34/34.
+
+---
+
+## 8.3b — inline suggestions and quick fixes
+
+**Status: landed, tested at the pure boundary.** Harness: `npm run test:editor`
+(19/19).
+
+### What landed
+
+| Piece | Detail |
+|---|---|
+| `extension/src/features/suggest.ts` | `buildSuggestionPrompt`, `cleanSuggestion`, `isUsable` — bounded to 12 lines / 600 chars |
+| `extension/src/features/fix.ts` | `buildFixPrompt`, `extractReplacement`, `isUsableFix`, `describeFix` |
+| `extension/src/features/editor.ts` | `SuggestProvider`, `FixProvider`, `runFix` — the `vscode` glue |
+| `aiBridge.suggest` (`Ctrl+Alt+\`) | arms the provider, then triggers the editor |
+| `aiBridge.fix` | the Quick Fix action on errors and warnings |
+
+Three decisions worth recording:
+
+- **Suggestions are armed, not always on.** The provider returns nothing unless a
+  command armed it, and disarms after one answer. On a free backend that takes
+  seconds, an automatic provider interrupts more often than it helps — so it
+  never fires while typing.
+- **A fix is previewed before it lands.** The replacement is shown in a modal with
+  its line count, then applied as one `WorkspaceEdit` over one line range: one
+  undo step, no partial state. A side-by-side diff is 8.3c; a modal with the exact
+  text is the cheap version of the same guarantee.
+- **An apology is never inserted.** `isUsableFix` refuses "Sorry, I cannot fix
+  this", which is otherwise a perfectly valid string to write into someone's
+  source file.
+
+The fix prompt marks the diagnostic line with `>> ` and includes six lines of
+context either side; the marker is stripped again on the way back, along with the
+context indent, in case the model echoes the framing it was shown.
+
+### A fixture bug this batch exposed
+
+`extension-smoke` failed on activation with
+`Cannot read properties of undefined (reading 'registerInlineCompletionItemProvider')`.
+The stub modelled a VS Code 1.94 but had no `languages` namespace at all. Every
+supported version has inline completions and code actions, so the **stub was
+incomplete, not the code** — it now models `languages`, `CodeActionKind`,
+`CodeAction`, `InlineCompletionItem` and `DiagnosticSeverity`, and records the
+providers it is given.
+
+### Not proven
+
+- **No suggestion or fix has been produced by a model here.** The harness proves
+  the prompts, the bounds and the cleanup; it does not prove a free model returns
+  usable code at a given cursor.
+- **The modal preview** has not been seen in a real editor.
+- **Latency.** The 30-second ceiling lives in the transport, not here; how often a
+  free tier answers inside it is unknown.

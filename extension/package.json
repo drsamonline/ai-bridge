@@ -2,7 +2,7 @@
   "name": "ai-bridge-vscode",
   "displayName": "AI Bridge",
   "description": "Drive a logged-in web chat AI (ChatGPT, Claude, Gemini, or your own) from inside VS Code. No API keys: the extension talks to the browser tab you are already signed in to.",
-  "version": "0.24.0",
+  "version": "0.25.0",
   "publisher": "ai-bridge",
   "private": true,
   "license": "SEE LICENSE IN LICENSE",
@@ -208,6 +208,14 @@
         "command": "aiBridge.commit.message",
         "title": "AI Bridge: Generate Commit Message",
         "icon": "$(sparkle)"
+      },
+      {
+        "command": "aiBridge.suggest",
+        "title": "AI Bridge: Suggest Code at Cursor"
+      },
+      {
+        "command": "aiBridge.fix",
+        "title": "AI Bridge: Fix This Problem"
       }
     ],
     "configuration": {
@@ -476,6 +484,28 @@
           "type": "string",
           "default": "auto",
           "markdownDescription": "Model for quick fixes (batch 8.3b). `auto` prefers a free model."
+        },
+        "aiBridge.features.suggestions.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable on-demand ghost-text suggestions. Never fires while typing."
+        },
+        "aiBridge.features.suggestions.maxPrefixChars": {
+          "type": "number",
+          "default": 2000,
+          "minimum": 200,
+          "description": "Characters of code before the cursor sent to the model."
+        },
+        "aiBridge.features.suggestions.maxSuffixChars": {
+          "type": "number",
+          "default": 800,
+          "minimum": 0,
+          "description": "Characters of code after the cursor sent to the model."
+        },
+        "aiBridge.features.fix.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show 'AI Bridge: Fix this' in the Quick Fix menu on errors and warnings."
         }
       }
     },
@@ -523,6 +553,12 @@
         "command": "aiBridge.compress.preview",
         "key": "ctrl+alt+c",
         "mac": "cmd+alt+c"
+      },
+      {
+        "command": "aiBridge.suggest",
+        "key": "ctrl+alt+\\",
+        "mac": "cmd+alt+\\",
+        "when": "editorTextFocus && !editorReadonly"
       }
     ],
     "menus": {

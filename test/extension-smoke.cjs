@@ -109,6 +109,34 @@ const vscodeStub = {
   ThemeColor,
   MarkdownString,
   EventEmitter,
+  // Batch 8.3b: the editor surfaces the suggestions and quick fixes register on.
+  // Every supported VS Code has these; the stub simply did not model them.
+  CodeActionKind: { QuickFix: 'quickfix', Refactor: 'refactor' },
+  DiagnosticSeverity: { Error: 0, Warning: 1, Information: 2, Hint: 3 },
+  CodeAction: class {
+    constructor(title, kind) {
+      this.title = title;
+      this.kind = kind;
+    }
+  },
+  InlineCompletionItem: class {
+    constructor(insertText, range) {
+      this.insertText = insertText;
+      this.range = range;
+    }
+  },
+  languages: {
+    inlineProviders: [],
+    codeActionProviders: [],
+    registerInlineCompletionItemProvider(selector, provider) {
+      this.inlineProviders.push(provider);
+      return { dispose() {} };
+    },
+    registerCodeActionsProvider(selector, provider) {
+      this.codeActionProviders.push(provider);
+      return { dispose() {} };
+    },
+  },
   window: {
     createOutputChannel(name) {
       return {
