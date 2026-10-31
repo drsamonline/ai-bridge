@@ -10,11 +10,18 @@
  * so a free tier either gets hammered or gets blamed for a reset.
  */
 
-/** Base class so a caller can catch every transport failure in one clause. */
+/**
+ * Base class so a caller can catch every transport failure in one clause.
+ *
+ * `status` is the HTTP status that produced the failure, when there was one.
+ * It is carried rather than folded into the message because the debug report
+ * needs it as a field: "HTTP 429" in prose cannot be counted, sorted or masked.
+ */
 export class ApiError extends Error {
   constructor(
     readonly code: string,
     message: string,
+    readonly status?: number,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -23,11 +30,12 @@ export class ApiError extends Error {
 
 /** The endpoint refused the credential: sign in again, do not retry. */
 export class AuthExpiredError extends ApiError {
+  /** `status` is 0 when the request was never made (no credential to send). */
   constructor(
     readonly providerId: string,
-    readonly status = 0,
+    status = 0,
   ) {
-    super('EAUTH', `${providerId}: sign-in expired${status ? ` (HTTP ${status})` : ''}`);
+    super('EAUTH', `${providerId}: sign-in expired${status ? ` (HTTP ${status})` : ''}`, status);
     this.name = 'AuthExpiredError';
   }
 }
@@ -41,6 +49,7 @@ export class RateLimitError extends ApiError {
     super(
       'ERATELIMIT',
       `${providerId}: rate limited${retryAfterMs ? `, retry in ${retryAfterMs} ms` : ''}`,
+      429,
     );
     this.name = 'RateLimitError';
   }
@@ -124,6 +133,7 @@ export function throwForStatus(
     throw new ApiError(
       'EPROVIDER',
       `${providerId}: HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''}`,
+      response.status,
     );
   }
 }

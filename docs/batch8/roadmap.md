@@ -1,6 +1,6 @@
 # Roadmap 8 — the free-tier productivity line
 
-**Status: open. Batches 8.0 and 8.1 landed and tested; 8.2–9.0 specified.**
+**Status: open. Batches 8.0, 8.1 and 8.4 landed and tested; 8.2, 8.3 and 9.0 specified.**
 
 Batches 0.1–7.3 built a bridge that drives a logged-in web chat over CDP, with
 three adapters, a router, project state, compression, rotation and a watchdog.

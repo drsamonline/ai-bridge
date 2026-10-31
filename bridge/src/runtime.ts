@@ -24,7 +24,14 @@ import { RamMonitor } from './ram/monitor';
 import { Watchdog } from './watchdog';
 import { AdapterRegistry } from './adapters/registry';
 import { Router, type ProviderSpec } from './router/router';
-import { ApiRegistry, type ApiMessage, type FetchLike } from './api';
+import {
+  ApiRegistry,
+  AuthExpiredError,
+  RateLimitError,
+  isAbortError,
+  type ApiMessage,
+  type FetchLike,
+} from './api';
 import {
   assembleNative,
   buildToolsSystemPrompt,
@@ -73,6 +80,25 @@ export class BridgeRuntime {
    * a replacement: nothing here launches a browser or touches a page.
    */
   readonly api: ApiRegistry;
+  /**
+   * Batch 8.4 — cooldowns for API endpoints, kept separate from the DOM chain.
+   * Sharing one router would put `api:*` ids into `prompt()`'s chain, where
+   * `adapters.get()` would throw. Same class, separate state, same policy.
+   */
+  readonly apiRouter: Router;
+  /** In-flight endpoint requests, so one can be cancelled by id. */
+  private readonly apiInFlight = new Map<string, AbortController>();
+  /** Last 20 endpoint requests, for the breakage report. */
+  private readonly apiRecent: Array<{
+    t: number;
+    model: string;
+    ok: boolean;
+    ms: number;
+    code?: string;
+    status?: number;
+    retryAfterMs?: number;
+  }> = [];
+  private apiSeq = 0;
   readonly adapters: AdapterRegistry;
   readonly router: Router;
   readonly bus = new EventEmitter();
@@ -118,6 +144,13 @@ export class BridgeRuntime {
     this.api = new ApiRegistry({
       log: (message) => log.debug?.(message),
       ...(opts.apiFetchImpl ? { fetchImpl: opts.apiFetchImpl } : {}),
+    });
+    this.apiRouter = new Router({
+      providers: [],
+      strategy: 'priority',
+      retries: 0,
+      backoff: 'exponential',
+      log: (level, message) => log[level](`api ${message}`),
     });
 
     this.wire();
@@ -486,6 +519,19 @@ export class BridgeRuntime {
     };
   }
 
+  /** Batch 8.4: one record per endpoint request, for the breakage report. */
+  private recordApi(entry: {
+    model: string;
+    ok: boolean;
+    ms: number;
+    code?: string;
+    status?: number;
+    retryAfterMs?: number;
+  }): void {
+    this.apiRecent.push({ t: Date.now(), ...entry });
+    if (this.apiRecent.length > 20) this.apiRecent.shift();
+  }
+
   /** Dispatch a `ctl.*` message. Every branch returns a JSON-able payload. */
   async control(msg: ControlMsg): Promise<unknown> {
     const log = this.opts.log;
@@ -645,11 +691,34 @@ export class BridgeRuntime {
         // Endpoints from configuration, validated one by one so a bad entry is
         // reported by id rather than failing the whole set.
         const result = this.api.setProviders(msg.providers ?? [], msg.keys ?? {});
+        // Batch 8.4: one router entry per endpoint, so a 429 has somewhere to
+        // cool. Priorities start at 101 so an endpoint never outranks a web chat.
+        const configured = new Set(result.accepted);
+        const names = new Map(this.api.providerList().map((p) => [p.id, p.name]));
+        result.accepted.forEach((id, index) => {
+          this.apiRouter.addProvider({
+            id: `api:${id}`,
+            label: names.get(id) ?? id,
+            enabled: true,
+            priority: 101 + index,
+            cooldownMs: 300_000,
+          });
+        });
+        // An endpoint that is no longer configured keeps no router entry.
+        for (const entry of this.apiRouter.status()) {
+          if (!configured.has(entry.id.replace(/^api:/, ''))) {
+            this.apiRouter.updateProvider(entry.id, { enabled: false });
+          }
+        }
         log.info(
           `api: ${result.accepted.length} endpoint(s) accepted, ${result.rejected.length} rejected`,
           { accepted: result.accepted },
         );
-        return { ...result, providers: this.api.statuses() };
+        return {
+          ...result,
+          providers: this.api.statuses(),
+          router: this.apiRouter.status(),
+        };
       }
       case 'ctl.api.models': {
         // A pinned catalogue is never fetched; an endpoint that fails keeps its
@@ -658,7 +727,12 @@ export class BridgeRuntime {
         return { models, providers: this.api.statuses() };
       }
       case 'ctl.api.status':
-        return { providers: this.api.statuses(), models: this.api.modelList() };
+        return {
+          providers: this.api.statuses(),
+          models: this.api.modelList(),
+          router: this.apiRouter.status(),
+          recent: this.apiRecent,
+        };
       case 'ctl.api.prompt': {
         // Batch 8.1: one endpoint answer, assembled. The three channels a chat
         // host needs — text, reasoning, tool calls — leave here as events, so a
@@ -673,9 +747,24 @@ export class BridgeRuntime {
           } satisfies ControlEvent);
 
         const model = msg.model;
-        if (!this.api.resolve(model)) {
-          throw new Error(`ECONFIG: unknown model "${model}"`);
+        const target = this.api.resolve(model);
+        if (!target) throw new Error(`ECONFIG: unknown model "${model}"`);
+
+        // Batch 8.4: an endpoint in cooldown fails fast instead of spending a
+        // request to learn what the router already knows.
+        const providerId = target.config.id;
+        const routerId = `api:${providerId}`;
+        const routerState = this.apiRouter.status().find((entry) => entry.id === routerId);
+        if (routerState?.state === 'cooling') {
+          const waitMs = Math.max(0, routerState.cooldownUntil - Date.now());
+          throw new Error(
+            `ERATELIMIT: ${providerId} is cooling for another ${Math.ceil(waitMs / 1000)}s`,
+          );
         }
+
+        const requestId = msg.requestId ?? `api-${(this.apiSeq += 1)}`;
+        const controller = new AbortController();
+        this.apiInFlight.set(requestId, controller);
 
         const tools = msg.tools ?? [];
         const promptToolProtocol = msg.promptToolProtocol === true;
@@ -692,7 +781,7 @@ export class BridgeRuntime {
           })),
         ];
 
-        push('stream.start', { model, phase: 'prompt', promptToolProtocol });
+        push('stream.start', { model, requestId, phase: 'prompt', promptToolProtocol });
 
         const sink: ResponseSink = {
           text: (part) =>
@@ -705,33 +794,107 @@ export class BridgeRuntime {
             push('api.usage', { model, promptTokens, completionTokens }),
         };
 
-        const assembled = await assembleNative(
-          this.api.stream({
-            model,
-            messages,
-            ...(tools.length ? { tools } : {}),
-            ...(msg.maxTokens !== undefined ? { maxTokens: msg.maxTokens } : {}),
-            ...(msg.temperature !== undefined ? { temperature: msg.temperature } : {}),
-          }),
-          sink,
-          {
-            tools,
-            promptToolProtocol,
-            onDrop: (reason, chars) =>
-              log.debug?.(`api prompt: dropped ${chars} chars of transcript echo (${reason})`),
-          },
-        );
+        try {
+          const assembled = await assembleNative(
+            this.api.stream({
+              model,
+              messages,
+              ...(tools.length ? { tools } : {}),
+              ...(msg.maxTokens !== undefined ? { maxTokens: msg.maxTokens } : {}),
+              ...(msg.temperature !== undefined ? { temperature: msg.temperature } : {}),
+              signal: controller.signal,
+            }),
+            sink,
+            {
+              tools,
+              promptToolProtocol,
+              isCancelled: () => controller.signal.aborted,
+              onDrop: (reason, chars) =>
+                log.debug?.(`api prompt: dropped ${chars} chars of transcript echo (${reason})`),
+            },
+          );
 
-        const totalMs = Date.now() - startedAt;
-        push('stream.end', { model, totalMs, ...assembled });
-        log.info('api prompt assembled', {
-          model,
-          textChars: assembled.textChars,
-          thinkingChars: assembled.thinkingChars,
-          toolCalls: assembled.toolCalls.length,
-          totalMs,
-        });
-        return { model, totalMs, ...assembled };
+          const totalMs = Date.now() - startedAt;
+          if (controller.signal.aborted) {
+            // A cancel is neither a success nor a failure: the endpoint did
+            // nothing wrong, the user changed their mind. Marking it either way
+            // would penalise the provider for our decision.
+            this.recordApi({ model, ok: false, ms: totalMs, code: 'ECANCELLED' });
+            push('stream.end', { model, requestId, totalMs, ...assembled, cancelled: true });
+            return { model, requestId, totalMs, ...assembled, cancelled: true };
+          }
+
+          this.apiRouter.markSuccess(routerId);
+          this.recordApi({ model, ok: true, ms: totalMs });
+          push('stream.end', { model, requestId, totalMs, ...assembled });
+          log.info('api prompt assembled', {
+            model,
+            textChars: assembled.textChars,
+            thinkingChars: assembled.thinkingChars,
+            toolCalls: assembled.toolCalls.length,
+            totalMs,
+          });
+          return { model, requestId, totalMs, ...assembled };
+        } catch (err) {
+          const error = err as Error & {
+            code?: string;
+            status?: number;
+            retryAfterMs?: number;
+          };
+          const totalMs = Date.now() - startedAt;
+
+          if (isAbortError(err, controller.signal)) {
+            this.recordApi({ model, ok: false, ms: totalMs, code: 'ECANCELLED' });
+            throw error;
+          }
+
+          if (err instanceof RateLimitError) {
+            // Cool for exactly as long as the endpoint asked, not our default.
+            const cooldownMs = this.apiRouter.markLimited(
+              routerId,
+              'rate',
+              err.retryAfterMs ? Date.now() + err.retryAfterMs : undefined,
+            );
+            push('api.limited', {
+              providerId,
+              retryAfterMs: err.retryAfterMs ?? null,
+              cooldownMs,
+            });
+            log.warn(`api: ${providerId} rate limited — cooling ${Math.round(cooldownMs / 1000)}s`);
+          } else if (err instanceof AuthExpiredError) {
+            // The credential is dead. Forget it, so the next request reports
+            // "signed out" instead of replaying it and cooling the chain.
+            const forgotten = this.api.forgetRejected(providerId);
+            push('api.auth', { providerId, forgotten });
+            log.warn(`api: ${providerId} credential refused${forgotten ? ' — forgotten' : ''}`);
+          } else {
+            this.apiRouter.markFailure(routerId);
+          }
+
+          this.recordApi({
+            model,
+            ok: false,
+            ms: totalMs,
+            ...(error.code ? { code: error.code } : {}),
+            ...(typeof error.status === 'number' && error.status > 0
+              ? { status: error.status }
+              : {}),
+            ...(typeof error.retryAfterMs === 'number'
+              ? { retryAfterMs: error.retryAfterMs }
+              : {}),
+          });
+          push('stream.end', { model, requestId, totalMs, failed: error.code ?? 'EUNKNOWN' });
+          throw error;
+        } finally {
+          this.apiInFlight.delete(requestId);
+        }
+      }
+      case 'ctl.api.cancel': {
+        const controller = this.apiInFlight.get(msg.requestId);
+        if (!controller) return { requestId: msg.requestId, cancelled: false };
+        controller.abort();
+        log.info(`api: request ${msg.requestId} cancelled`);
+        return { requestId: msg.requestId, cancelled: true };
       }
       case 'ctl.health':
         return this.health(msg.adapterId);

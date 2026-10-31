@@ -67,3 +67,50 @@ report: the report still contains no chat text
 - Feeding `retryAfterMs` into cooldowns changes failover timing, which existing
   router tests assert. Those tests get the API path added beside them, not
   rewritten.
+
+## Result
+
+**Status: landed, tested.** Harness: `npm run test:resilience` (15/15).
+
+### What landed
+
+| Item from the spec | State |
+|---|---|
+| `retryAfterMs` → router cooldown | **done.** A second `Router` instance, `apiRouter`, keyed `api:<providerId>` — sharing the DOM chain would have put `api:*` ids into `prompt()`, where `adapters.get()` throws. Priorities start at 101, so an endpoint never outranks a web chat. |
+| A 429 without `retry-after` | **done.** Falls back to the 300 s configured cooldown rather than the 0 ms a missing header would imply. |
+| Fail fast while cooling | **done.** A cooling endpoint throws `ERATELIMIT` before a request is made — the check asserts nothing new appears in the request record. |
+| `forgetRejected` | **done.** A refused credential is deleted; the next call reports `EAUTH` with `status: 0`, meaning no request was made. |
+| Abort is not failure | **done.** A cancel is recorded as `ECANCELLED` and marks neither failure nor success. |
+| Cancel stops the upstream | **done.** `ctl.api.cancel` aborts the controller; the harness asserts the server saw the connection close and stopped sending. |
+| Typed errors carry their status | **done** — and this one was found by the harness, not planned. `RateLimitError` had no `status`, so a 429 could not be reported as one. `ApiError` now carries `status`, and `EPROVIDER` carries the real code. |
+| Debug report: timings and statuses | **partly.** The bridge now keeps the last 20 endpoint requests (`code`, `status`, `ms`, `retryAfterMs`) and exposes them on `ctl.api.status`. Writing them into the extension's breakage-report file is **8.4b**. |
+
+### Deferred, with the reason
+
+- **Typed errors on the DOM path.** An adapter that lands on a sign-in page still
+  reports "no answer" rather than `EAUTH`. Doing it properly needs a per-provider
+  sign-in marker, which is a selector-map change and belongs with 9.0 — the batch
+  that reworks what the DOM path is for.
+- **The breakage-report file.** The data is collected; only the extension side is
+  missing, and it must keep the existing allow-list guard that refuses to write a
+  report containing chat text.
+
+### Files touched
+
+```
+bridge/src/api/errors.ts         status on the error types
+bridge/src/runtime.ts            apiRouter, cancel, telemetry, classification
+shared/src/control.ts            ctl.api.cancel, requestId, 2 event kinds
+test/api-resilience.cjs          new (15 checks)
+package.json                     +test:resilience, added to test:all
+```
+
+The DOM path, the adapters and `Settings` are untouched, again. `runtime.prompt()`
+does not know the API router exists.
+
+### Verification
+
+`test:resilience` 15/15, `test:tools` 34/34, `test:api` 32/32, and the wider line
+unchanged: handshake 12/12, router 35/35, custom-provider 12/12 (one flaky
+`ENOTEMPTY` profile cleanup on the first run, clean on retry), settings-model
+62/62, contract 31/31, extension-smoke 40/40, panel-virtual 29/29, release 26/26.

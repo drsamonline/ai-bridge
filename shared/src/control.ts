@@ -186,7 +186,11 @@ export type ControlMsg =
       promptToolProtocol?: boolean;
       maxTokens?: number;
       temperature?: number;
-    };
+      /** Lets the caller cancel this request by id (batch 8.4). */
+      requestId?: string;
+    }
+  /** Batch 8.4 — stop an in-flight endpoint request at the upstream. */
+  | { op: 'ctl.api.cancel'; requestId: string };
 
 export type ControlEventKind =
   | 'attached'
@@ -207,6 +211,9 @@ export type ControlEventKind =
   | 'tool.call'
   | 'tool.result'
   | 'api.usage'
+  /* Batch 8.4 — what the router learned from an endpoint failure. */
+  | 'api.auth'
+  | 'api.limited'
   | 'adapter.health'
   | 'provider.switch'
   | 'boot.injected';
