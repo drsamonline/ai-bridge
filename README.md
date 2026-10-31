@@ -4,6 +4,8 @@
 
 # AI Bridge
 
+[![Licence](https://img.shields.io/badge/licence-PolyForm%20Noncommercial%201.0.0-3f7a52?style=flat-square)](LICENSE)
+
 **Your browser's AI, inside VS Code. No API key, no second subscription.**
 
 <a href="LICENSE"><img src="docs/badges/license.svg" alt="PolyForm Noncommercial 1.0.0" /></a>
