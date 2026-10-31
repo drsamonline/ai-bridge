@@ -58,3 +58,68 @@ prompt: the commit prompt asks for Conventional Commits and nothing else
   to something; a feature whose model is missing falls back rather than failing.
 - Feature traffic competes with chat for the same rate limit. 8.4's cooldown
   accounting is what stops one feature starving another.
+
+## Result
+
+**Status: routing core landed and tested; one feature shipped, two specified.**
+Harness: `npm run test:features` (27/27).
+
+### What landed
+
+| Piece | Detail |
+|---|---|
+| `extension/src/features/routing.ts` | `resolveModel`, `isFit`, `FEATURE_POLICIES`, `clampText`, `thinkingFor` — pure, no `vscode` |
+| `extension/src/features/service.ts` | `askFeature`: resolve → dispatch → clamp, with the model resolved *before* the prompt is sent |
+| `extension/src/features/commit.ts` | `stagedDiff`, `truncateDiff`, `buildCommitPrompt`, `parseCommitMessage` |
+| `extension.ts` | `aiBridge.commit.message` — the ✨ button in Source Control, plus the SCM input insertion |
+| `extension/package.json` | command, `scm/title` menu, six feature settings |
+
+The routing rule is the point: under `auto` a **free** model wins, then
+declaration order. So the cheap tier absorbs the chores and the strong model is
+left for chat — which is the whole reason this batch exists.
+
+Two decisions worth recording:
+
+- **Capability flags live in the router, not in `shared`.** `ModelInfo` in
+  `shared/src/types.ts` is a frozen contract; `RoutableModel` adds `kind`,
+  `source` and fit flags without touching it. A model with no flags is fit for
+  everything — silence is not exclusion.
+- **A subscription tab is not "free".** A web chat's quota is something the user
+  already pays for, so `auto` prefers an endpoint that reports a free model, and
+  only falls back to a tab when that is all there is.
+
+### The feature that ships
+
+`aiBridge.commit.message` reads the staged diff (falling back to the working
+tree), asks for a Conventional Commit, cleans up the fences and quotes models add
+anyway, and writes the result into the SCM box — or the clipboard when the git
+extension is not available.
+
+The git call is a plain function of a directory, so the harness builds a real
+throwaway repository, stages a change and asserts on the real diff. That is the
+only way to know `stagedDiff` works: a fixture would prove the regex, not the
+call.
+
+### Specified, not built — 8.3b
+
+- **Inline suggestions.** Settings are declared (`features.suggestions.model`),
+  and the policy exists (600 chars, 160 tokens, thinking off). The
+  `InlineCompletionItemProvider` itself is not written.
+- **Quick fixes.** Same: `features.fix.model` declared, policy in place, no
+  `CodeActionProvider`.
+
+Both are consumers of `askFeature`, which is tested and waiting for them.
+
+### Not proven
+
+- **The SCM button in a real editor.** The harness proves routing, the diff and
+  the parsing; it does not prove the git extension's `inputBox` accepts the
+  value, because that needs a running VS Code with a git repository open.
+- **Whether the message is any good.** No model has answered a commit prompt in
+  this environment.
+
+### Verification
+
+`test:features` 27/27, and the wider line unchanged: extension-smoke 40/40,
+release 26/26, bundle 5/5, settings-panel 17/17, panel-virtual 29/29,
+lm-provider 19/19, api-tools 34/34.

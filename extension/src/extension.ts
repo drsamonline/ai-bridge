@@ -13,6 +13,14 @@ import * as os from 'node:os';
 import * as vscode from 'vscode';
 import { registerAiBridgeLanguageModel, type LmClient } from './lm';
 import {
+  askFeature,
+  buildCommitPrompt,
+  parseCommitMessage,
+  stagedDiff,
+  type RoutableModel,
+  type ServiceBridge,
+} from './features';
+import {
   BridgeClient,
   type BrowserStatus,
   type ControlEvent,
@@ -1574,6 +1582,89 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   };
 
+  /* ----------------------------------------------------------- batch 8.3 */
+
+  /** The models the router may choose from, as the bridge currently knows them. */
+  const routableModels = async (): Promise<RoutableModel[]> => {
+    const models: RoutableModel[] = [];
+    try {
+      const status = (await client.request({ op: 'ctl.api.status' })) as {
+        models?: Array<{ id: string; label: string; providerId: string; isFree?: boolean }>;
+      };
+      for (const row of status?.models ?? []) {
+        models.push({
+          id: row.id,
+          label: row.label,
+          isFree: row.isFree === true,
+          kind: 'api',
+          source: row.providerId,
+        });
+      }
+    } catch (err) {
+      write('warn', `features: endpoint models unavailable — ${(err as Error).message}`);
+    }
+    try {
+      const list = (await client.request({ op: 'ctl.adapters' })) as {
+        adapters?: Array<{ id: string; label: string }>;
+      };
+      for (const row of list?.adapters ?? []) {
+        models.push({
+          id: `dom:${row.id}`,
+          label: `${row.label} (tab)`,
+          // A subscription tab is not free: it is quota the user already pays
+          // for. Only an endpoint that reports a free model is preferred.
+          isFree: false,
+          kind: 'dom',
+          source: row.id,
+        });
+      }
+    } catch (err) {
+      write('warn', `features: adapters unavailable — ${(err as Error).message}`);
+    }
+    return models;
+  };
+
+  const serviceBridge: ServiceBridge = {
+    async askApi(modelId, prompt, opts) {
+      const result = (await client.request({
+        op: 'ctl.api.prompt',
+        model: modelId,
+        messages: [{ role: 'user', content: prompt }],
+        ...(opts.maxTokens ? { maxTokens: opts.maxTokens } : {}),
+      })) as { text?: string };
+      return result?.text ?? '';
+    },
+    async askDom(adapterId, prompt) {
+      const result = (await client.request({
+        op: 'ctl.prompt',
+        adapterId,
+        text: prompt,
+        debounceMs: 400,
+        timeoutMs: 120_000,
+      })) as { text?: string };
+      return result?.text ?? '';
+    },
+  };
+
+  /** Puts the message in the SCM box, or the clipboard when that is unavailable. */
+  const setCommitInput = async (folderPath: string, message: string): Promise<boolean> => {
+    const gitExtension = vscode.extensions.getExtension<{
+      getAPI(version: number): {
+        repositories: Array<{ rootUri: { fsPath: string }; inputBox: { value: string } }>;
+      };
+    }>('vscode.git');
+    const api = gitExtension?.isActive ? gitExtension.exports?.getAPI(1) : undefined;
+    const repo =
+      api?.repositories.find((entry) => folderPath.startsWith(entry.rootUri.fsPath)) ??
+      api?.repositories[0];
+    if (repo) {
+      repo.inputBox.value = message;
+      return true;
+    }
+    await vscode.env.clipboard.writeText(message);
+    return false;
+  };
+
   // Batch 8.2 — appear in Copilot Chat, where this VS Code can host a provider.
   // On 1.90–1.103 there is no such API and this returns undefined; the extension
   // then behaves exactly as it did before the batch.
@@ -1594,6 +1685,67 @@ export function activate(context: vscode.ExtensionContext): void {
     { dispose: () => void stateManager?.dispose() },
     { dispose: () => void compressor?.stop() },
 
+    vscode.commands.registerCommand('aiBridge.commit.message', async () => {
+      const folder = vscode.workspace.workspaceFolders?.[0];
+      if (!folder) {
+        void vscode.window.showWarningMessage('AI Bridge: open a folder first.');
+        return;
+      }
+      if (phase !== 'ready') {
+        void vscode.window.showWarningMessage('AI Bridge: start the bridge first.');
+        return;
+      }
+      const config = vscode.workspace.getConfiguration('aiBridge');
+      try {
+        const diff = await stagedDiff(folder.uri.fsPath);
+        if (!diff.trim()) {
+          void vscode.window.showInformationMessage(
+            'AI Bridge: nothing to describe — stage a change first.',
+          );
+          return;
+        }
+        const prompt = buildCommitPrompt(diff, {
+          style: config.get<string>('features.commit.style', ''),
+          extra: config.get<string>('features.commit.extra', ''),
+        });
+        const message = await vscode.window.withProgress(
+          {
+            location: vscode.ProgressLocation.SourceControl,
+            title: 'AI Bridge: writing the commit message…',
+          },
+          async () => {
+            const result = await askFeature(
+              serviceBridge,
+              await routableModels(),
+              'commit',
+              config.get<string>('features.commit.model', 'auto'),
+              prompt,
+            );
+            write(
+              'info',
+              `commit message from ${result.modelLabel} (${result.text.length} chars${
+                result.clamped ? ', clamped' : ''
+              })`,
+            );
+            return parseCommitMessage(result.text);
+          },
+        );
+        if (!message) {
+          void vscode.window.showWarningMessage('AI Bridge: the model returned no message.');
+          return;
+        }
+        const placed = await setCommitInput(folder.uri.fsPath, message);
+        if (!placed) {
+          void vscode.window.showInformationMessage(
+            'AI Bridge: commit message copied to the clipboard.',
+          );
+        }
+      } catch (err) {
+        const reason = (err as Error).message;
+        write('error', `commit message failed: ${reason}`);
+        void vscode.window.showErrorMessage(`AI Bridge: ${reason}`);
+      }
+    }),
     vscode.commands.registerCommand('aiBridge.bridge.start', async () => {
       await startAll();
     }),

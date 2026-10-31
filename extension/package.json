@@ -2,7 +2,7 @@
   "name": "ai-bridge-vscode",
   "displayName": "AI Bridge",
   "description": "Drive a logged-in web chat AI (ChatGPT, Claude, Gemini, or your own) from inside VS Code. No API keys: the extension talks to the browser tab you are already signed in to.",
-  "version": "0.22.0",
+  "version": "0.23.0",
   "publisher": "ai-bridge",
   "private": true,
   "license": "SEE LICENSE IN LICENSE",
@@ -203,6 +203,11 @@
         "command": "aiBridge.diagnostics.report",
         "title": "AI Bridge: Export Breakage Report",
         "category": "AI Bridge"
+      },
+      {
+        "command": "aiBridge.commit.message",
+        "title": "AI Bridge: Generate Commit Message",
+        "icon": "$(sparkle)"
       }
     ],
     "configuration": {
@@ -441,6 +446,36 @@
           "type": "boolean",
           "default": true,
           "description": "On a provider limit, move to the next provider in priority order and inject the boot so the context follows (\u00a75.9)."
+        },
+        "aiBridge.features.commit.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the sparkle button in Source Control to write a commit message."
+        },
+        "aiBridge.features.commit.model": {
+          "type": "string",
+          "default": "auto",
+          "markdownDescription": "Model for commit messages. `auto` prefers a free model, so the strong one is left for chat."
+        },
+        "aiBridge.features.commit.style": {
+          "type": "string",
+          "default": "Conventional Commits (type(scope): summary)",
+          "description": "The commit message style to ask for."
+        },
+        "aiBridge.features.commit.extra": {
+          "type": "string",
+          "default": "",
+          "description": "Extra instruction appended to the commit prompt, e.g. mention the ticket number."
+        },
+        "aiBridge.features.suggestions.model": {
+          "type": "string",
+          "default": "auto",
+          "markdownDescription": "Model for inline suggestions (batch 8.3b). `auto` prefers a free model."
+        },
+        "aiBridge.features.fix.model": {
+          "type": "string",
+          "default": "auto",
+          "markdownDescription": "Model for quick fixes (batch 8.3b). `auto` prefers a free model."
         }
       }
     },
@@ -489,7 +524,16 @@
         "key": "ctrl+alt+c",
         "mac": "cmd+alt+c"
       }
-    ]
+    ],
+    "menus": {
+      "scm/title": [
+        {
+          "command": "aiBridge.commit.message",
+          "when": "scmProvider == git && config.aiBridge.features.commit.enabled",
+          "group": "navigation"
+        }
+      ]
+    }
   },
   "scripts": {
     "build": "tsc -b",
