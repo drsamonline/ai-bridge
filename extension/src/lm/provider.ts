@@ -108,6 +108,74 @@ export function toMessages(raw: readonly unknown[]): LmMessage[] {
   return messages;
 }
 
+/**
+ * One message on the wire, as `ctl.api.prompt` accepts it.
+ *
+ * Batch 8.1b: an assistant turn that called a tool has to carry that call back,
+ * or the provider receives a tool result answering a call id it never issued.
+ * That is what made the loop one-way: the first turn worked, the second was
+ * rejected by the endpoint with no useful error.
+ */
+export interface WireMessage {
+  role: string;
+  content: string;
+  toolCallId?: string;
+  toolCalls?: Array<{ id: string; name: string; arguments: string }>;
+}
+
+/** Converts normalised messages into the wire shape, calls included. */
+export function toWireMessages(messages: readonly LmMessage[]): WireMessage[] {
+  const out: WireMessage[] = [];
+  for (const message of messages) {
+    const text = message.parts
+      .filter((part): part is { kind: 'text'; text: string } => part.kind === 'text')
+      .map((part) => part.text)
+      .join('');
+
+    const toolCalls = message.parts
+      .filter((part): part is { kind: 'toolCall'; callId: string; name: string; input: unknown } =>
+        part.kind === 'toolCall',
+      )
+      .map((part) => ({
+        id: part.callId,
+        name: part.name,
+        // The wire wants the arguments as a JSON string, as the model emitted them.
+        arguments: typeof part.input === 'string' ? part.input : JSON.stringify(part.input ?? {}),
+      }));
+
+    if (toolCalls.length) {
+      out.push({ role: message.role, content: text, toolCalls });
+    } else if (text) {
+      out.push({ role: message.role, content: text });
+    }
+
+    // Results travel as their own messages, after the turn that asked for them.
+    for (const part of message.parts) {
+      if (part.kind === 'toolResult') {
+        out.push({ role: 'tool', content: part.content, toolCallId: part.callId });
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Does any part carry an image?
+ *
+ * Batch 8.3 — nothing here can send one yet, and silently dropping a screenshot
+ * is worse than refusing it: the user would think the model had seen it.
+ */
+export function hasImagePart(rawMessages: readonly unknown[]): boolean {
+  const walk = (value: unknown): boolean => {
+    if (!value || typeof value !== 'object') return false;
+    const record = value as Record<string, unknown>;
+    if (typeof record.mimeType === 'string' && record.mimeType.startsWith('image/')) return true;
+    if (Array.isArray(record.content)) return record.content.some(walk);
+    return false;
+  };
+  return rawMessages.some(walk);
+}
+
 /** Flattens parts into the single prompt string a web chat needs. */
 export function toPromptText(messages: LmMessage[]): string {
   const lines: string[] = [];
@@ -193,6 +261,12 @@ export class AiBridgeLanguageModelProvider {
     const models = await this.opts.bridge.listModels();
     const model = models.find((entry) => entry.id === modelId);
     if (!model) throw new Error(`ENOMODEL: "${modelId}" is no longer available`);
+
+    if (hasImagePart(rawMessages)) {
+      // Refusing beats silently dropping: the user would think the model had seen
+      // the screenshot and wonder why it answered as if it had not.
+      throw new Error('ENOIMAGE: this build cannot send images to a model yet');
+    }
 
     const messages = toMessages(rawMessages);
     const tools = toTools(options?.tools);

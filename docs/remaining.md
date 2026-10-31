@@ -1,41 +1,52 @@
 # What is left
 
-**600 checks across 20 suites, all green** (plus the compression benchmark, which writes a report).
+**861 checks across 31 suites, all green** — verified locally and re-run by CI on
+every push. (Sum of each suite's own reported total; `compression-bench` writes a
+report instead of counting.)
+
+The batch-8 free-tier line is **complete**: eleven items landed across 0.21.0 →
+0.28.0. Its records are in [`batch8/`](batch8/), one file per batch.
 
 ## Closed since the last list
 
 | Item | Detail |
 |---|---|
-| §5.12 **live preview on every tab** | Providers (model list), Router (failover chain), Compressor (T0 sample), State (boot size), Repo (query → attach/skip verdict), Performance (headroom before the 80% point). Verified in a real browser, not by string matching. |
-| **Boot trimmed** | File shas dropped (the model never uses them; the applier keeps its own copy) and task lines capped at 160 chars. **975 tokens for a 37-item state, ~45 fewer** on that state — and it scales with file count. |
-| **Repo context relevance gate** | `repo.contextMode: auto|always|off`; attaches a 500–900 token bundle only when the question names a file, symbol, `call()` or code term, and logs why when it skips. |
+| **Live selectors** | Demoted from blocker to fallback: the fast path tries first and the DOM adapter is the floor (9.0, 9.0b). Still unproven against the real sites — see below. |
+| **`ChatGPT (2 left)`** | Honest for API endpoints, which report `usage` in the stream (8.0). The DOM path keeps the cooldown. |
+| **Tool results back to the model** | The loop closes (8.1b): an assistant turn carries its own tool calls, so a result answers a call id the provider issued. |
+| **Typed errors on the DOM path** | A sign-in page reports `EAUTH` with the host, not "no answer" (8.4b). |
+| **Images** | Refused with `ENOIMAGE` rather than silently dropped. Sending them is still not built. |
 
 ## Open — needs your machine
 
-1. **Live selectors** for ChatGPT / Claude / Gemini (fixtures only so far).
-2. **The 1-hour cap hold** (§7.1's real criterion). A 3-minute soak passes flat.
-3. **The 10-minute soak** — `npm run soak`.
-4. **Install the `.vsix`** — unsigned, not on the Marketplace.
+1. **A provider template.** The fast path is inert for ChatGPT / Claude / Gemini
+   until one exists. [`batch8/capture-a-template.md`](batch8/capture-a-template.md)
+   is the procedure. This is the single highest-value thing left.
+2. **Live selectors** for the three web chats — fixtures only so far.
+3. **Editor surfaces** — Copilot rendering, the SCM commit button, the diff view,
+   the report file write. Wired and smoke-tested; never seen in a real editor.
+4. **The 10-minute soak** (`npm run soak`) and the 1-hour cap hold.
+5. **Install the `.vsix`** — unsigned, not on the Marketplace.
+6. **Windows** — the `ps`/PowerShell parsers exist; only Linux has run.
 
 ## Open — buildable, deliberately not done
 
 | Item | Why |
 |---|---|
-| **Windows** | the `ps`/PowerShell parsers exist but only Linux has run; more untested branches would add false confidence |
-| **`ChatGPT (2 left)`** | no provider exposes a reliable remaining-count; a cooldown is shown instead |
-| **T1 / T2 quality** | both are built, guarded and tested for safety, but never run against a real model — how much they actually save is unknown. T0's savings are measured: 17% overall, 0% on terse prompts, 37% on repo bundles |
+| **Images to the model** | Refused clearly today. Real support needs base64 parts through both transports and a per-endpoint capability check. |
+| **A release object for v0.24.0** | The tag exists; the Release workflow triggers on push to `main`, not on tag creation, so 0.24.0 has no assets. |
+| **T1 / T2 quality** | Built, guarded and tested for safety, never run against a real model. T0's savings are measured: 17% overall, 0% on terse prompts, 37% on repo bundles. |
+| **Windows CI** | More untested branches would add false confidence until someone runs them. |
 
-## Batch 8 — the free-tier line
+## Known traps, so they are not rediscovered
 
-The roadmap is in [`batch8/roadmap.md`](batch8/roadmap.md). It changes two items
-on this page.
-
-- **Live selectors** (open item 1) stops being a blocker in batch 9.0: the fast
-  path goes first and the DOM adapter becomes the fallback rung, which is a
-  better answer than testing the selectors harder.
-- **`ChatGPT (2 left)`** becomes honest for API endpoints in batch 8.0 — they
-  report `usage` in the stream, so a remaining count is real rather than guessed.
-  The DOM path keeps the cooldown.
-
-Batch 8.0 is landed and tested (`npm run test:api`, 32/32). 8.1–9.0 are specified
-and blocked on their predecessors.
+- **`docs/` is the Pages site root.** A `../` asset resolves on disk and 404s on
+  the site. The pages workflow now fails on any asset that escapes the root.
+- **The bridge's suites rewrite their own `docs/batch-*.md` timestamps.** Restore
+  them before committing, or the diff carries churn.
+- **`ENOTEMPTY` on a Chrome profile cleanup** in `models`, `contract` and
+  `custom-provider` is a flaky `/tmp` race in a container, not a regression. It
+  passes on retry.
+- **undici cannot allocate WASM** in some sandboxes, so the global `fetch` throws
+  instead of rejecting. The 8.x harnesses probe for that and fall back to a
+  `node:http` shim.

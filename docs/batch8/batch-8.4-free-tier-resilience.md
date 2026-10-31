@@ -156,3 +156,22 @@ why the guard exists on top of it.
   editor glue with no way to verify it here, and the modal already shows the exact
   replacement and its line count — so it stays a nicety rather than a gap in the
   guarantee.
+
+---
+
+## 8.4b (continued) — typed errors on the DOM path
+
+The spec deferred this to 9.0, and 9.0 did not take it, so it stayed open until
+now. `bridge/src/adapters/signin.ts` adds `looksLikeSignIn` and `signInError`:
+
+- a page whose URL is a login/sign-in/SSO/account-chooser page reports
+  `EAUTH: <provider> is showing a sign-in page (<host>)` instead of "no answer",
+  so the user is sent to a login rather than hunting for a selector;
+- the message carries the **host only** — no path, no query, which can contain a
+  conversation id;
+- `/api/` paths are excluded: an endpoint is not a page a user is looking at, and
+  matching it would mislabel a failed request as a signed-out session.
+
+Checks: `npm run test:signin` (7/7). The heuristic is URL-only and deliberately
+narrow — `authoring` contains "auth", and a false positive would tell a signed-in
+user to sign in, which is worse than the vaguer message it replaced.

@@ -168,7 +168,7 @@ suites cover it: `npm run test:api` (32 checks) and `npm run test:tools`
 
 This is an experimental project and it would be dishonest to imply otherwise.
 
-**Proven** — 600 checks across 20 suites, run on every push:
+**Proven** — 861 checks across 31 suites, run on every push:
 
 - The bridge, the CDP controller, the watchdog, the router and the state layer.
 - All three adapters and a fourth custom one, driven end to end **against fixtures**.
@@ -180,6 +180,8 @@ This is an experimental project and it would be dishonest to imply otherwise.
 **Not proven** — and you should know before relying on it:
 
 - **Live selectors.** No adapter has run against the real ChatGPT, Claude or Gemini. Fixtures only.
+- **The free-tier line** — API transport, tool layer, the fast-path cascade,
+  per-feature routing, the Copilot provider: 196 checks across 9 suites.
 - **The one-hour memory soak.** Three minutes passes flat; an hour needs real hardware.
 - **T1 and T2 quality.** Built, guarded, tested for safety — never run against a real model.
 - **Windows.** The code paths exist; only Linux has been exercised.

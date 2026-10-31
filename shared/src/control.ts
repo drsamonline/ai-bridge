@@ -180,7 +180,13 @@ export type ControlMsg =
       op: 'ctl.api.prompt';
       /** Namespaced model id: `custom:<providerId>/<model>`. */
       model: string;
-      messages: Array<{ role: string; content: string; toolCallId?: string }>;
+      messages: Array<{
+        role: string;
+        content: string;
+        toolCallId?: string;
+        /** Batch 8.1b: the assistant turn's own calls, so results can answer them. */
+        toolCalls?: Array<{ id: string; name: string; arguments: string }>;
+      }>;
       tools?: Array<{ name: string; description?: string; parameters?: Record<string, unknown> }>;
       /** Tools travel as prompt text when the endpoint has no tools API. */
       promptToolProtocol?: boolean;

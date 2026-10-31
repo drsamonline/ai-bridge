@@ -127,3 +127,26 @@ allocation fails.
 - Feeding a tool *result* back to the model — `tool.result` is declared as an
   event kind but nothing emits it yet; that is the loop-closing half of agent
   mode and belongs with the panel work.
+
+---
+
+## 8.1b — the loop closes
+
+**Status: landed, tested.** Checks in `npm run test:lm` (25/25).
+
+`tool.result` was a declared event kind with nothing emitting it, and the reason
+was a real bug rather than a missing wire: the message mapping dropped the
+assistant's own `toolCall`. So a tool result travelled back answering a call id
+the provider had never issued — the first turn worked, the second was rejected
+with no useful error.
+
+- `toWireMessages` moved into the host-free `provider.ts`, so the mapping is
+  testable and the assistant turn now carries its calls;
+- `ctl.api.prompt` messages accept `toolCalls`, and the bridge passes them
+  through to the endpoint;
+- an empty turn is dropped rather than sent, and arguments already serialised are
+  not double-encoded.
+
+Images are the remaining half of this gap: a part carrying an image is **refused**
+with `ENOIMAGE` rather than silently dropped, because a user who sends a
+screenshot and gets an answer about text will believe the model saw it.

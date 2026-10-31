@@ -50,6 +50,7 @@ import {
 import { composeBoot, deltaLineCount } from './bootTransport';
 import { DOM_SHAPE_SNIPPET } from '@ai-bridge/shared';
 import { isStreamingAdapter } from './adapters/types';
+import { looksLikeSignIn, signInError } from './adapters/signin';
 import type { Logger } from './logger';
 
 export interface SwitchRecord {
@@ -388,6 +389,11 @@ export class BridgeRuntime {
             });
           }
         } else if (!(await adapter.isReady(page))) {
+          // Batch 8.4b: a sign-in page is not a broken selector. Reporting "no
+          // answer" here sends the user hunting for a selector instead of a login.
+          if (looksLikeSignIn(page.url())) {
+            throw new Error(signInError(adapterId, page.url()));
+          }
           log.info('adapter not ready — connecting', { adapterId, url: page.url() });
           await adapter.connect(page);
         }
@@ -940,6 +946,9 @@ export class BridgeRuntime {
             role: message.role as ApiMessage['role'],
             content: message.content,
             ...(message.toolCallId ? { toolCallId: message.toolCallId } : {}),
+            // Batch 8.1b: the assistant's own calls, so a tool result answers a
+            // call id the provider actually issued.
+            ...(message.toolCalls?.length ? { toolCalls: message.toolCalls } : {}),
           })),
         ];
 

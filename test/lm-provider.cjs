@@ -383,6 +383,85 @@ async function main() {
     assert.equal(providerModule.countTokens('x'), 1, 'never zero for a non-empty string');
   });
 
+  /* ---------------------------------------------------- the tool loop (8.1b) */
+
+  await check('loop: the assistant call travels back with the result', () => {
+    const wire = providerModule.toWireMessages([
+      { role: 'user', parts: [{ kind: 'text', text: 'read it' }] },
+      {
+        role: 'assistant',
+        parts: [
+          { kind: 'text', text: 'Reading.' },
+          { kind: 'toolCall', callId: 'call_1', name: 'read_file', input: { path: 'a' } },
+        ],
+      },
+      { role: 'user', parts: [{ kind: 'toolResult', callId: 'call_1', content: 'file text' }] },
+    ]);
+    assert.deepEqual(wire.map((m) => m.role), ['user', 'assistant', 'tool']);
+    assert.equal(wire[1].toolCalls.length, 1);
+    assert.equal(wire[1].toolCalls[0].id, 'call_1');
+    assert.equal(JSON.parse(wire[1].toolCalls[0].arguments).path, 'a');
+    assert.equal(wire[2].toolCallId, 'call_1', 'the result answers the call it belongs to');
+  });
+
+  await check('loop: a call with no text still travels', () => {
+    const wire = providerModule.toWireMessages([
+      {
+        role: 'assistant',
+        parts: [{ kind: 'toolCall', callId: 'c', name: 'read_file', input: {} }],
+      },
+    ]);
+    assert.equal(wire.length, 1);
+    assert.equal(wire[0].toolCalls[0].name, 'read_file');
+    assert.equal(wire[0].content, '');
+  });
+
+  await check('loop: arguments already a string are not double-encoded', () => {
+    const wire = providerModule.toWireMessages([
+      { role: 'assistant', parts: [{ kind: 'toolCall', callId: 'c', name: 'f', input: '{"a":1}' }] },
+    ]);
+    assert.equal(wire[0].toolCalls[0].arguments, '{"a":1}');
+  });
+
+  await check('loop: an empty turn is dropped rather than sent', () => {
+    assert.deepEqual(providerModule.toWireMessages([{ role: 'assistant', parts: [] }]), []);
+  });
+
+  /* -------------------------------------------------------- images (8.3 gap) */
+
+  await check('images: an image part is detected, text is not', () => {
+    assert.equal(
+      providerModule.hasImagePart([{ role: 1, content: [{ mimeType: 'image/png', data: 'x' }] }]),
+      true,
+    );
+    assert.equal(
+      providerModule.hasImagePart([{ role: 1, content: [{ value: 'just text' }] }]),
+      false,
+    );
+  });
+
+  await check('images: a screenshot is refused, not silently dropped', async () => {
+    const bridge = fakeBridge([API_MODEL], async () => ({
+      text: '',
+      thinking: '',
+      toolCalls: [],
+      cancelled: false,
+    }));
+    const provider = makeProvider(bridge);
+    await assert.rejects(
+      () =>
+        provider.provideLanguageModelChatResponse(
+          API_MODEL.id,
+          [{ role: 1, content: [{ mimeType: 'image/png', data: 'x' }] }],
+          {},
+          { report() {} },
+          { isCancellationRequested: false },
+        ),
+      /ENOIMAGE/,
+    );
+    assert.equal(bridge.seen.length, 0, 'nothing was sent to the model');
+  });
+
   /* ------------------------------------------------------------------ total */
 
   console.log('');

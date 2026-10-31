@@ -11,7 +11,12 @@
 
 import * as vscode from 'vscode';
 import type { ControlEvent } from '@ai-bridge/shared';
-import { AiBridgeLanguageModelProvider, VENDOR, lmRegistrar } from './provider';
+import {
+  AiBridgeLanguageModelProvider,
+  VENDOR,
+  lmRegistrar,
+  toWireMessages,
+} from './provider';
 import type {
   LmAskRequest,
   LmAskResult,
@@ -175,7 +180,9 @@ function makeBridge(opts: RegisterOptions): LmBridge {
           op: 'ctl.api.prompt',
           model: request.model.id,
           requestId,
-          messages: apiMessages(request),
+          // Batch 8.1b: built by the host-free layer, so the assistant's own tool
+          // calls travel back with the results that answer them.
+          messages: toWireMessages(request.messages),
           ...(request.tools.length
             ? {
                 tools: request.tools.map((tool) => ({
@@ -205,21 +212,6 @@ function makeBridge(opts: RegisterOptions): LmBridge {
       }
     },
   };
-}
-
-/** Flattens parts into the wire message shape the bridge accepts. */
-function apiMessages(request: LmAskRequest): Array<{ role: string; content: string; toolCallId?: string }> {
-  const out: Array<{ role: string; content: string; toolCallId?: string }> = [];
-  for (const message of request.messages) {
-    for (const part of message.parts) {
-      if (part.kind === 'text') {
-        out.push({ role: message.role, content: part.text });
-      } else if (part.kind === 'toolResult') {
-        out.push({ role: 'tool', content: part.content, toolCallId: part.callId });
-      }
-    }
-  }
-  return out;
 }
 
 /** The single prompt string a web chat receives. */
