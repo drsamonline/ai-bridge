@@ -1,6 +1,6 @@
 # What is left
 
-**895 checks across 32 suites, all green** — verified locally and re-run by CI on
+**898 checks across 32 suites, all green** — verified locally and re-run by CI on
 every push. (Sum of each suite's own reported total; `compression-bench` writes a
 report instead of counting.)
 
@@ -46,6 +46,18 @@ The batch-8 free-tier line is **complete**: eleven items landed across 0.21.0 �
 | **A release object for v0.24.0** | The tag exists; the Release workflow triggers on push to `main`, not on tag creation, so 0.24.0 has no assets. |
 | **T1 / T2 quality** | Built, guarded and tested for safety, never run against a real model. T0's savings are measured: 17% overall, 0% on terse prompts, 37% on repo bundles. |
 | **Windows CI** | More untested branches would add false confidence until someone runs them. |
+
+## Audit 3 — open findings
+
+Full report: [`audit-3.md`](audit-3.md). Two findings were fixed during it; four
+are open and none is a security hole:
+
+| # | Finding | Why it is still open |
+|---|---|---|
+| F3 | The `nodeFetch` shim is duplicated in four test files (~240 lines) | mechanical, no behaviour at stake |
+| F4 | `extension.ts` is 2,521 lines and holds ~40 command registrations | a refactor with a wide blast radius; not worth it before the editor surfaces are verified |
+| F5 | No linter is configured | adding one would surface ~70 deliberate patterns to triage |
+| F7 | The TCP fallback is dormant code | kept for one release by decision, then deleted |
 
 ## Known traps, so they are not rediscovered
 

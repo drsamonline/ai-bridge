@@ -30,6 +30,7 @@ import {
   MAX_PAYLOAD_BYTES,
   PROTOCOL_VERSION,
   SOCKET_MODE,
+  assertOwnerOnly,
   socketPath,
   isBridgeMsg,
   isControlMsg,
@@ -122,8 +123,11 @@ export async function startBridgeServer(opts: BridgeServerOptions): Promise<Brid
     try {
       fs.chmodSync(socketFile, SOCKET_MODE);
     } catch {
-      /* best effort: a filesystem that refuses chmod */
+      // Best effort attempt; assertOwnerOnly below is the actual decision.
     }
+    // The socket is the only thing authenticating a client now, so an
+    // un-tightenable mode means the bridge must not run.
+    assertOwnerOnly(socketFile, 'bridge socket');
   }
 
   let boundPort = opts.port;
@@ -290,7 +294,7 @@ export async function startBridgeServer(opts: BridgeServerOptions): Promise<Brid
             : createHash('sha256').update(opts.token).digest('hex').slice(0, 12),
           capabilities: ['attach', 'recycle', 'navigate', 'send', 'observe', 'health', 'ctl.*'],
         };
-        log.info('handshake OK — token accepted', {
+        log.info(viaSocket ? 'handshake OK — socket peer' : 'handshake OK — token accepted', {
           remote,
           pid: process.pid,
           protocol: PROTOCOL_VERSION,

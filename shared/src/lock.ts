@@ -77,14 +77,48 @@ export class LockError extends Error {
   }
 }
 
-/** Create the lock directory (0700) if needed and tighten its mode. */
+/**
+ * Refuse to run if a path is reachable by anyone but its owner.
+ *
+ * Batch 9.5 removed the shared secret, so a file mode is now the *only* control
+ * on the socket and the directory that holds the lock. That makes a swallowed
+ * `chmod` failure a security hole rather than a cosmetic one: a 0777 socket lets
+ * any local user drive the bridge and the browser behind it, and a 0755 lock
+ * directory lets them replace `lock.json` and point the client at a bridge of
+ * their own. So this throws instead of warning.
+ *
+ * A no-op on Windows, where the ACL is the control and POSIX modes are advisory.
+ */
+export function assertOwnerOnly(target: string, what: string): void {
+  if (process.platform === 'win32') return;
+
+  let mode: number;
+  try {
+    mode = fs.statSync(target).mode & 0o777;
+  } catch (err) {
+    throw new LockError(
+      `cannot stat the ${what} at ${target}: ${(err as Error).message}`,
+      'EBADMODE',
+    );
+  }
+  if ((mode & 0o077) !== 0) {
+    throw new LockError(
+      `${what} at ${target} is mode 0${mode.toString(8)} — reachable by other users; refusing to run unprotected`,
+      'EBADMODE',
+    );
+  }
+}
+
+/** Create the lock directory (0700) if needed, and verify it is owner-only. */
 export function ensureLockDir(dir: string = lockDir()): string {
   fs.mkdirSync(dir, { recursive: true, mode: LOCK_DIR_MODE });
   try {
     fs.chmodSync(dir, LOCK_DIR_MODE);
   } catch {
-    // Best effort: some filesystems (network mounts) refuse chmod.
+    // Best effort *attempt*: the verification below is what decides.
   }
+  // The directory holds the lock file that tells the client where to connect.
+  assertOwnerOnly(dir, 'lock directory');
   return dir;
 }
 

@@ -123,6 +123,19 @@ async function main() {
     assert.strictEqual((fs.statSync(socketFile).mode & 0o077), 0, 'socket is reachable by others');
   });
 
+  // ---- 1c. the mode check fails closed (batch 9.5 audit) ----------------
+  // The socket is the only authentication now, so a mode that cannot be
+  // tightened has to stop the bridge rather than be shrugged off.
+  const permissive = path.join(home, 'permissive.txt');
+  fs.writeFileSync(permissive, 'x');
+  fs.chmodSync(permissive, 0o644);
+  check('a world-readable path is refused, not warned about', () =>
+    assert.throws(() => shared.assertOwnerOnly(permissive, 'test file'), /reachable by other users/));
+  check('an owner-only path is accepted', () =>
+    shared.assertOwnerOnly(lockFile, 'lock file'));
+  check('a missing path is a clear error', () =>
+    assert.throws(() => shared.assertOwnerOnly(path.join(home, 'nope'), 'ghost'), /cannot stat/));
+
   // ---- 2. handshake through the real client -----------------------------
   const client = new shared.BridgeClient({ lockDir });
   client.on('log', (level, message) => {
