@@ -84,6 +84,10 @@ jobs:
               echo "=== skip $suite (drives a browser; Linux only)"
               continue
             fi
+            if grep -q '@platform linux' "$file"; then
+              echo "=== skip $suite (declares @platform linux)"
+              continue
+            fi
             echo "=== $suite"
             node "$file"
           done

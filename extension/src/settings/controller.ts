@@ -46,6 +46,12 @@ export interface PanelSnapshot {
   /** For the Repo tab's context preview. */
   contextMode?: 'auto' | 'always' | 'off';
   /**
+   * Batch 9.4 — the web-chat cascade. Which rung is answering for each provider,
+   * and how often it had to step down. Endpoints have no rungs, so they are not
+   * listed here.
+   */
+  rungs?: Array<{ id: string; rung: string | null; answered: number; fellThrough: number }>;
+  /**
    * Batch 9.2 — endpoint status. Makes a rejected key or a dead endpoint visible
    * in the panel instead of only in the log.
    */

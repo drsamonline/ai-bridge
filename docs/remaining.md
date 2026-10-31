@@ -1,6 +1,6 @@
 # What is left
 
-**891 checks across 32 suites, all green** — verified locally and re-run by CI on
+**892 checks across 32 suites, all green** — verified locally and re-run by CI on
 every push. (Sum of each suite's own reported total; `compression-bench` writes a
 report instead of counting.)
 
@@ -16,6 +16,7 @@ The batch-8 free-tier line is **complete**: eleven items landed across 0.21.0 �
 | **Tool results back to the model** | The loop closes (8.1b): an assistant turn carries its own tool calls, so a result answers a call id the provider issued. |
 | **Typed errors on the DOM path** | A sign-in page reports `EAUTH` with the host, not "no answer" (8.4b). |
 | **Images** | Sent as inline `data:` URLs when the endpoint declares `imageInput`; refused with `ENOIMAGE` naming the model when it does not (9.1). |
+| **Rung rows for web chats** | The Providers tab shows which rung is answering per provider and how often one stepped down (9.4). |
 | **Endpoint status and a Test button** | The Providers tab shows signed-in / no key / error per endpoint, and one click sends a real prompt (9.2, 9.3). |
 | **Settings UI for the new features** | Endpoints and per-feature models are editable in the Providers tab, and the panel pushes them to the bridge. |
 
@@ -30,11 +31,13 @@ The batch-8 free-tier line is **complete**: eleven items landed across 0.21.0 �
    the report file write. Wired and smoke-tested; never seen in a real editor.
 4. **The 10-minute soak** (`npm run soak`) and the 1-hour cap hold.
 5. **Install the `.vsix`** — unsigned, not on the Marketplace.
-6. **Windows** — a `windows-latest` CI job builds, bundles and runs every
-   browser-free suite (the list is derived by grepping each test for browser
-   markers, so it cannot drift). Its first run failed on a mis-classified
-   suite; that is fixed and awaiting a green run. The `ps`/PowerShell parsers
-   and the CDP path are still Linux-only in practice.
+6. **Windows — blocked, not merely untested.** The bridge's loopback security is
+   a lock file carrying the session token, protected by POSIX modes (0700 dir,
+   0600 file). NTFS cannot express them, so the file reports 0666 and the client
+   **refuses to read it and does not start**. That is fail-closed and correct;
+   making Windows work needs a different protection (an ACL, or a transport that
+   does not put the token on disk), which is a design decision, not a fix.
+   `test/handshake.cjs` declares `@platform linux` and the Windows job skips it.
 
 ## Open — buildable, deliberately not done
 

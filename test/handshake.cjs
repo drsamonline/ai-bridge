@@ -1,4 +1,9 @@
 #!/usr/bin/env node
+// @platform linux — the bridge's loopback security relies on POSIX file modes
+// (0700 on the lock dir, 0600 on the lock file) and the lock file carries the
+// session token. NTFS cannot express those modes, so the file comes back 0666 and
+// the client correctly refuses to read it: AI Bridge does not start on Windows.
+// See docs/remaining.md. The Windows job skips files carrying this marker.
 /**
  * Batch 0.1 acceptance harness — headless.
  *

@@ -247,3 +247,24 @@ not, and the previous answer to "did it work?" was reading the Output channel.
 Scope note: the button tests an **endpoint**, not the DOM cascade. Endpoints have
 no rungs — `ctl.api.prompt` is a direct request. Which rung answered is a property
 of `ctl.prompt`, and the panel has no row for a web chat's cascade yet.
+
+---
+
+## 9.4 — the rung rows
+
+**Status: landed, tested.** `settings-panel` 20/20.
+
+The Providers tab showed endpoints but not the cascade, so "which rung is
+answering" was invisible even though `ctl.prompt` knew. It now lists each web
+chat that has been prompted with:
+
+- a dot — green once a rung has answered, amber once one has fallen through,
+  empty before anything has been tried;
+- `answering on fast` (or `replay`, or `no rung has answered`);
+- how many times it answered, and how many times a rung stepped down.
+
+`ctl.fastpath.set` does not return this state, so the panel reads it back from
+`ctl.fastpath.status` after every push rather than inferring it from the config.
+
+Endpoints are deliberately absent: `ctl.api.prompt` is a direct request with no
+rungs, so a rung row for one would be a lie.

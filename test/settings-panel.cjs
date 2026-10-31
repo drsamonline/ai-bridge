@@ -361,6 +361,11 @@ async function main() {
             { id: 'local', label: 'Local', signedIn: true, models: 3, lastError: null },
             { id: 'dead', label: 'Dead', signedIn: false, models: 0, lastError: 'connect ECONNREFUSED' },
           ],
+          // Batch 9.4: one chat answering on the fast rung, one stuck on dom.
+          rungs: [
+            { id: 'chatgpt', rung: 'fast', answered: 4, fellThrough: 1 },
+            { id: 'claude', rung: null, answered: 0, fellThrough: 2 },
+          ],
           t1: null,
         },
       },
@@ -387,6 +392,14 @@ async function main() {
     assert.match(endpointText, /Local/, 'the healthy endpoint is missing');
     assert.match(endpointText, /3 model/, 'the model count is missing');
     assert.match(endpointText, /connect ECONNREFUSED/, 'the error is not shown');
+  });
+
+  check('web-chat rungs render with the rung and the counts (batch 9.4)', () => {
+    assert.match(endpointText, /Web chat rungs:/, 'no rung block');
+    assert.match(endpointText, /answering on fast/, 'the answering rung is missing');
+    assert.match(endpointText, /no rung has answered/, 'the stuck provider is missing');
+    assert.match(endpointText, /4 answered/, 'the answered count is missing');
+    assert.match(endpointText, /2 fell through/, 'the fall-through count is missing');
   });
 
   const testButtons = await page.evaluate(() =>

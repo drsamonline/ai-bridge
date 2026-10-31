@@ -410,6 +410,26 @@ export function renderSettingsHtml(opts: RenderOptions): string {
           }
         });
       }
+      // Batch 9.4: the web-chat cascade. An endpoint has no rungs, so a provider
+      // only appears here once it has been prompted.
+      if (snapshot.rungs && snapshot.rungs.length) {
+        th.appendChild(el('div', { class: 'fixed' }, 'Web chat rungs:'));
+        snapshot.rungs.forEach(function (r) {
+          var row = el('div', { class: 'health-row' });
+          row.appendChild(
+            el('span', { class: 'dot ' + (r.rung ? 'green' : r.fellThrough ? 'yellow' : '') }),
+          );
+          row.appendChild(el('span', { class: 'name' }, r.id));
+          row.appendChild(
+            el('span', { class: 'fixed' }, r.rung ? 'answering on ' + r.rung : 'no rung has answered'),
+          );
+          if (r.answered) row.appendChild(el('span', { class: 'fixed' }, r.answered + ' answered'));
+          if (r.fellThrough) {
+            row.appendChild(el('span', { class: 'fixed' }, r.fellThrough + ' fell through'));
+          }
+          th.appendChild(row);
+        });
+      }
       if (snapshot.models && snapshot.models.length) {
         th.appendChild(el('div', { class: 'fixed' }, 'Models:'));
         snapshot.models.forEach(function (m) {

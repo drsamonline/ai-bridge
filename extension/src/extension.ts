@@ -1218,6 +1218,7 @@ export function activate(context: vscode.ExtensionContext): void {
   // Batch 9.2: the last endpoint statuses, refreshed whenever they are pushed.
   // The snapshot is synchronous, so it reads a cache rather than the bridge.
   let lastEndpoints: PanelSnapshot['endpoints'] = [];
+  let lastRungs: PanelSnapshot['rungs'] = [];
 
   const panelSnapshot = (): PanelSnapshot => ({
     ramPercent: ram?.percent ?? null,
@@ -1242,6 +1243,7 @@ export function activate(context: vscode.ExtensionContext): void {
     snapshots: snapshotNames,
     health: lastHealth,
     endpoints: lastEndpoints,
+    rungs: lastRungs,
     t1: t1Gate ? { enabled: t1Gate.enable, reason: t1Gate.reason } : null,
   });
 
@@ -1559,6 +1561,25 @@ export function activate(context: vscode.ExtensionContext): void {
         accepted: string[];
         rejected: Array<{ id: string; error: string }>;
       };
+      // Batch 9.4: which rung is answering, per web chat. `set` does not return
+      // this, so it is read back rather than inferred.
+      const fastStatus = (await client.request({ op: 'ctl.fastpath.status' }).catch(() => null)) as {
+        rungs?: Array<{
+          providerId: string;
+          rung: string | null;
+          answered: Record<string, number>;
+          fellThrough: Record<string, number>;
+        }>;
+      } | null;
+      if (fastStatus?.rungs) {
+        lastRungs = fastStatus.rungs.map((entry) => ({
+          id: entry.providerId,
+          rung: entry.rung,
+          answered: Object.values(entry.answered ?? {}).reduce((a, b) => a + b, 0),
+          fellThrough: Object.values(entry.fellThrough ?? {}).reduce((a, b) => a + b, 0),
+        }));
+      }
+
       const statuses = (res as { providers?: Array<{ id: string; name: string; signedIn: boolean; modelCount: number; lastError?: string }> }).providers;
       if (statuses) {
         lastEndpoints = statuses.map((entry) => ({
