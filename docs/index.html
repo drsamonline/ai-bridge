@@ -240,6 +240,18 @@
     .signal .rail::after,.eyebrow .pip{animation:none}
     html{scroll-behavior:auto}
   }
+
+  /* ---------- light theme ----------
+     Added so the page reads on paper. It overrides the page's own variables and
+     nothing else — no markup, no layout, no type. */
+  :root, html {
+    color-scheme: light;
+    --bg: #f7f6f2;
+    --panel: #ffffff;
+    --line: #e2ddd2;
+    --ink: #14161a;
+    --dim: #5c6470;
+  }
 </style>
 </head>
 <body>
