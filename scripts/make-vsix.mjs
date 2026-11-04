@@ -31,6 +31,9 @@ const contentTypes = `<?xml version="1.0" encoding="utf-8"?>
   <Default Extension=".js" ContentType="application/javascript" />
   <Default Extension=".map" ContentType="application/json" />
   <Default Extension=".svg" ContentType="image/svg+xml" />
+  <!-- The icon is a .png. An OPC package without a content type for it is not a
+       valid package, and a strict validator refuses the upload. -->
+  <Default Extension=".png" ContentType="image/png" />
   <Default Extension=".md" ContentType="text/markdown" />
   <Default Extension=".vsixmanifest" ContentType="text/xml" />
 </Types>`;
@@ -57,6 +60,7 @@ const vsixManifest = `<?xml version="1.0" encoding="utf-8"?>
   <Assets>
     <Asset Type="Microsoft.VisualStudio.Code.Manifest" Path="extension/package.json" Addressable="true" />
     <Asset Type="Microsoft.VisualStudio.Services.Content.Details" Path="extension/README.md" Addressable="true" />
+    <Asset Type="Microsoft.VisualStudio.Services.Content.License" Path="extension/LICENSE.txt" Addressable="true" />
   </Assets>
 </PackageManifest>`;
 
@@ -78,6 +82,12 @@ fs.copyFileSync(bundle, path.join(extStage, 'dist', 'extension.js'));
 if (fs.existsSync(path.join(EXT, 'media'))) {
   fs.cpSync(path.join(EXT, 'media'), path.join(extStage, 'media'), { recursive: true });
 }
+const licence = path.join(ROOT, 'LICENSE');
+fs.writeFileSync(
+  path.join(extStage, 'LICENSE.txt'),
+  fs.existsSync(licence) ? fs.readFileSync(licence) : 'All rights reserved.\n',
+);
+
 const readme = path.join(ROOT, 'README.md');
 fs.writeFileSync(path.join(extStage, 'README.md'), fs.existsSync(readme) ? fs.readFileSync(readme) : '# AI Bridge\n');
 

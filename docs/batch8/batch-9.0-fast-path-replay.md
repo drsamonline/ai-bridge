@@ -392,3 +392,24 @@ change or trigger `release.yml` can publish, so branch protection and workflow
 review now carry the weight the token used to. And a registration is bound to a
 workflow file, not to a branch — pin an environment with required reviewers if it
 matters.
+
+---
+
+## 10.3 — what the first Open VSX publish would have hit
+
+Audited the publish path before running it, because a first publish has specific
+ways to fail and reading them off a red log is the slow way.
+
+| # | Finding | Fixed |
+|---|---|---|
+| 1 | `license: "SEE LICENSE IN LICENSE"` is npm prose, not an SPDX expression. Open VSX validates the field. | Set to `PolyForm-Noncommercial-1.0.0`, the actual licence |
+| 2 | The packer declared **no content type for `.png`**, and the icon is a `.png`. An OPC package missing a content type for a file it contains is not a valid package. | `.png` → `image/png` |
+| 3 | No `LICENSE` inside the package, and no License asset in the manifest. | `extension/LICENSE.txt` shipped and declared |
+
+Left alone, because they are on the publisher's side, not the code's: the
+**namespace** must exist and be owned (`ai-bridge`), and the first publish must
+carry a token. Both are in the release notes for the user.
+
+What is *not* a risk, checked: the identity in `extension.vsixmanifest`
+(`ai-bridge-vscode` / `0.38.0` / `ai-bridge`) matches `package.json`, the README is
+present, and `engines.vscode` is within what the registry accepts.
