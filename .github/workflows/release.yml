@@ -169,6 +169,17 @@ jobs:
       # workflow is not actually using trusted publishing.
       #
       # `--skip-duplicate` keeps a re-run of the same version from failing.
+      # Open VSX does NOT create a namespace from your login — publishing to an
+      # unclaimed publisher fails with "Unknown publisher". Creating it is
+      # idempotent enough for CI: an existing namespace returns an error that is
+      # ignored, so this can run on every release.
+      - name: Ensure the Open VSX namespace exists
+        if: ${{ env.OVSX_PAT != '' }}
+        continue-on-error: true
+        run: |
+          PUBLISHER=$(node -p "require('./extension/package.json').publisher")
+          echo "ensuring namespace: $PUBLISHER"
+          npx --yes ovsx@latest create-namespace "$PUBLISHER" --pat "$OVSX_PAT"
       - name: Publish to Open VSX
         continue-on-error: true
         run: |

@@ -460,3 +460,26 @@ or the runner, and gained a check that the runner **reads `test:all`** — other
 Also worth recording: the 0.40.0 run was not stuck at all. It was cancelled —
 by me, when a force-cancel aimed at the previous run landed on the one in progress.
 The stuck one was 0.38.0.
+
+### 10.6 — "Unknown publisher": the namespace is not automatic
+
+The first real publish failed with:
+
+```
+❌  Unknown publisher: drsamonline
+Use the 'create-namespace' command to create a namespace corresponding to your publisher name.
+```
+
+That corrects an assumption made earlier in this same effort: switching to the
+account's own username does **not** make the namespace exist. PyPI creates a
+project's namespace implicitly; **Open VSX does not** — the publisher name has to
+be claimed before anything can be published into it, even when it equals your login.
+
+The workflow now creates it before publishing, deriving the name from
+`extension/package.json` so it cannot drift from the manifest, and ignoring the
+error when it already exists. It is skipped entirely when no token is set.
+
+Worth noting for the next time this bites: the step reported **success** while
+failing, because `continue-on-error: true` makes a non-zero exit green. The only
+way to know was to read the log line. That is the cost of not failing the release
+over an optional publish — a deliberate trade, but it means "green" is not evidence.
