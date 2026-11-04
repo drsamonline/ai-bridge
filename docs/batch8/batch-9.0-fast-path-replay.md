@@ -413,3 +413,16 @@ carry a token. Both are in the release notes for the user.
 What is *not* a risk, checked: the identity in `extension.vsixmanifest`
 (`ai-bridge-vscode` / `0.38.0` / `ai-bridge`) matches `package.json`, the README is
 present, and `engines.vscode` is within what the registry accepts.
+
+### 10.4 — publishing under the account's own namespace
+
+`publisher` changed from `ai-bridge` to `drsamonline`, so the extension id is now
+**`drsamonline.ai-bridge-vscode`**.
+
+Why: a namespace that is not your login has to be claimed and verified on Open VSX
+before anything can be published to it. Publishing under your own username needs no
+verification at all, so the first publish is one fewer thing to get wrong.
+
+The packer's fallback publisher was changed with it — a missing `publisher` field
+would otherwise have published under the old id and produced an extension nobody
+expected.

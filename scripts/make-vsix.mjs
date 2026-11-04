@@ -19,7 +19,7 @@ const manifest = JSON.parse(fs.readFileSync(path.join(EXT, 'package.json'), 'utf
 
 const id = manifest.name;
 const version = manifest.version;
-const publisher = manifest.publisher ?? 'ai-bridge';
+const publisher = manifest.publisher ?? 'drsamonline';
 const engine = manifest.engines?.vscode ?? '^1.90.0';
 const out = path.join(ROOT, `ai-bridge-${version}.vsix`);
 
