@@ -92,7 +92,27 @@ const readme = path.join(ROOT, 'README.md');
 fs.writeFileSync(path.join(extStage, 'README.md'), fs.existsSync(readme) ? fs.readFileSync(readme) : '# AI Bridge\n');
 
 if (fs.existsSync(out)) fs.rmSync(out);
-execFileSync('zip', ['-qr', out, '.'], { cwd: stage, stdio: 'inherit' });
+// `-X` drops the extra file attributes Info-ZIP writes by default (Extended
+// Timestamp 0x5455 and Unix UID/GID 0x7875). Open VSX refuses a package whose
+// entries carry them — "potentially harmful extra fields" — which is how the first
+// real publish died after the namespace was created.
+execFileSync('zip', ['-qrX', out, '.'], { cwd: stage, stdio: 'inherit' });
+
+// Verify it rather than trust the flag: a wrong zip invocation is invisible until
+// the registry rejects the upload, and by then it is a red CI run to debug.
+{
+  const { execFileSync: readZip } = await import('node:child_process');
+  const listing = readZip('unzip', ['-Z1', out], { encoding: 'utf8' });
+  const verbose = readZip('unzip', ['-Z', out], { encoding: 'utf8' });
+  if (/extra field/i.test(verbose)) {
+    console.error('the package contains zip entries with extra fields — Open VSX will reject it');
+    process.exit(1);
+  }
+  if (listing.trim().split('\n').length < 3) {
+    console.error('the package looks empty');
+    process.exit(1);
+  }
+}
 fs.rmSync(stage, { recursive: true, force: true });
 
 const kb = (fs.statSync(out).size / 1024).toFixed(1);

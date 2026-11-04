@@ -483,3 +483,26 @@ Worth noting for the next time this bites: the step reported **success** while
 failing, because `continue-on-error: true` makes a non-zero exit green. The only
 way to know was to read the log line. That is the cost of not failing the release
 over an optional publish — a deliberate trade, but it means "green" is not evidence.
+
+### 10.7 — "potentially harmful extra fields"
+
+With the namespace created, the registry accepted the identity and then refused the
+archive:
+
+```
+❌  Extension publication blocked: extension file contains zip entries with
+    potentially harmful extra fields.
+```
+
+Info-ZIP writes two extra attribute records into every entry by default — Extended
+Timestamp (`0x5455`) and Unix UID/GID (`0x7875`). Open VSX treats them as an archive
+hardening problem and blocks the upload. `zip -X` omits them.
+
+The packer now uses `-qrX` **and verifies the result**, because the failure mode is
+invisible: the file is built, uploads, and is rejected by the registry, which shows
+up as a red CI run with a message about zip internals. A local check is one line and
+catches it before the push.
+
+Three publish failures in a row, each one hiding behind the previous:
+unknown publisher → namespace created → invalid archive → rejected. None of them
+were visible until the one before was fixed.
