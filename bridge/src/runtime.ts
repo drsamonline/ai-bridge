@@ -20,6 +20,7 @@ import type {
 } from '@ai-bridge/shared';
 import { CdpController } from './cdp/controller';
 import { launchBrowser } from './cdp/launch';
+import { detectLocalModels } from './api/local';
 import { DEFAULT_PORTS } from './cdp/discovery';
 import { RamMonitor } from './ram/monitor';
 import { Watchdog } from './watchdog';
@@ -909,6 +910,18 @@ export class BridgeRuntime {
           providers: this.api.statuses(),
           router: this.apiRouter.status(),
         };
+      }
+      case 'ctl.api.detect': {
+        // Batch 10.1 — read-only. Nothing is registered here; the caller decides.
+        const found = await detectLocalModels({
+          ...(msg.ports ? { ports: msg.ports } : {}),
+        });
+        log.info(
+          found.length
+            ? `local models: ${found.map((c) => `${c.id} (${c.models.length})`).join(', ')}`
+            : 'local models: none running',
+        );
+        return { candidates: found.map((candidate) => ({ ...candidate })) };
       }
       case 'ctl.api.models': {
         // A pinned catalogue is never fetched; an endpoint that fails keeps its

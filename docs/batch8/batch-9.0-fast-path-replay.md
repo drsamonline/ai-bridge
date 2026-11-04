@@ -308,3 +308,51 @@ it. It now awaits `spawn`/`error` and returns `ESPAWN: could not start …`.
 Not proven: no real browser has been launched by this code. The assertions are the
 arguments we would pass and the failure paths, which is the part that can be wrong
 silently.
+
+---
+
+## 10.1 — local models, and reaching VSCodium
+
+**Status: landed, tested.** `npm run test:local` (8/8).
+
+### Finding a model already running
+
+`AI Bridge: Add Local Model` probes the four servers people actually run —
+Ollama (11434), LM Studio (1234), llama.cpp (8080), vLLM (8000) — and registers
+the one you pick as a keyless endpoint.
+
+Why this matters more than it looks: it is the only path with **no browser, no API
+key, and no prompt leaving the machine**. For a VSCodium user it is the natural
+default, because VSCodium ships no Copilot at all.
+
+Two design points:
+
+- **The probe writes nothing.** `ctl.api.detect` is read-only and returns a report;
+  registering is the caller's decision, so a scan can never quietly change the
+  configuration. The harness asserts the module has no settings access.
+- **A server that answers with zero models is not offered.** An empty endpoint
+  looks configured and then fails at the first prompt, which is worse than absent.
+
+Two bugs the harness caught, both in my own first version:
+
+1. `ports` *filtered* the known list instead of replacing it, so a server on a
+   custom port was silently skipped while the caller believed it had been checked.
+2. A server on a custom port got a generic `local-<port>` identity. Which endpoint
+   answered (`/api/tags` vs `/v1/models`) is what identifies it, so an Ollama on
+   any port is now named Ollama.
+
+### Reaching VSCodium
+
+The release workflow publishes to **Open VSX** — the gallery VSCodium reads —
+when `OVSX_PAT` is set. It skips rather than fails when the secret is absent, so a
+fork without it still gets a GitHub release.
+
+One gotcha worth recording: a step's `if` cannot read its own `env`, so the token
+has to sit at **job** level for `if: env.OVSX_PAT != ''` to ever be true. Written
+the obvious way, the publish step would have been silently skipped forever.
+
+Static compatibility with VSCodium is good: the extension uses only standard
+`vscode.*` APIs and calls no Copilot command. The one difference is that VSCodium
+ships no Copilot, so the contributed chat models have no host — the panel at
+`Ctrl+Alt+A` is the interface there, and the code already treats the LM API as
+optional. Not proven: a real VSCodium run.

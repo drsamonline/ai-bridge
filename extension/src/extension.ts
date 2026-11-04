@@ -2093,6 +2093,66 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('aiBridge.bridge.showLog', () => {
       output.show(true);
     }),
+    vscode.commands.registerCommand('aiBridge.api.detectLocal', async () => {
+      // Batch 10.1: the cheapest path — no browser, no key, nothing leaves the
+      // machine. Probed first, registered only if the user picks one.
+      if (phase !== 'ready') {
+        void vscode.window.showWarningMessage('AI Bridge: start the bridge first.');
+        return;
+      }
+
+      const found = (await client.request({ op: 'ctl.api.detect' }).catch((err: Error) => ({
+        candidates: [] as Array<{ id: string; name: string; baseUrl: string; models: string[] }>,
+        error: err.message,
+      }))) as {
+        candidates: Array<{ id: string; name: string; baseUrl: string; models: string[] }>;
+        error?: string;
+      };
+
+      if (found.error) {
+        void vscode.window.showErrorMessage(`AI Bridge: ${found.error}`);
+        return;
+      }
+      if (!found.candidates.length) {
+        void vscode.window.showInformationMessage(
+          'AI Bridge: no local model server answered. Start Ollama (port 11434), LM Studio (1234), llama.cpp (8080) or vLLM (8000) and try again.',
+        );
+        return;
+      }
+
+      const pick = await vscode.window.showQuickPick(
+        found.candidates.map((candidate) => ({
+          label: candidate.name,
+          description: `${candidate.models.length} model(s)`,
+          detail: candidate.models.slice(0, 8).join(', ') + (candidate.models.length > 8 ? ' …' : ''),
+          candidate,
+        })),
+        { placeHolder: 'Add this local server as an endpoint' },
+      );
+      if (!pick) return;
+
+      const config = vscode.workspace.getConfiguration('aiBridge');
+      const existing = config.get<unknown[]>('api.providers', []) ?? [];
+      const entry = {
+        id: pick.candidate.id,
+        name: pick.candidate.name,
+        baseUrl: pick.candidate.baseUrl,
+        noApiKey: true,
+        models: pick.candidate.models,
+        toolCalling: true,
+        imageInput: false,
+      };
+      const merged = [
+        ...existing.filter((item) => (item as { id?: string }).id !== entry.id),
+        entry,
+      ];
+      await config.update('api.providers', merged, vscode.ConfigurationTarget.Global);
+      await pushApiProviders();
+      write('info', `local endpoint added: ${entry.id} (${entry.models.length} model(s))`);
+      void vscode.window.showInformationMessage(
+        `AI Bridge: added ${entry.name}. Pick a model in the model picker, or press Test in settings.`,
+      );
+    }),
     vscode.commands.registerCommand('aiBridge.browser.launch', async () => {
       if (phase !== 'ready') {
         void vscode.window.showWarningMessage('AI Bridge: start the bridge first.');

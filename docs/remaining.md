@@ -1,6 +1,6 @@
 # What is left
 
-**913 checks across 33 suites, all green** — verified locally and re-run by CI on
+**921 checks across 34 suites, all green** — verified locally and re-run by CI on
 every push. (Sum of each suite's own reported total; `compression-bench` writes a
 report instead of counting.)
 
@@ -17,6 +17,8 @@ The batch-8 free-tier line is **complete**: eleven items landed across 0.21.0 �
 | **Typed errors on the DOM path** | A sign-in page reports `EAUTH` with the host, not "no answer" (8.4b). |
 | **Images** | Sent as inline `data:` URLs when the endpoint declares `imageInput`; refused with `ENOIMAGE` naming the model when it does not (9.1). |
 | **Windows transport** | A local socket replaces TCP loopback, and the token is no longer written to disk (9.5). |
+| **Local models** | `AI Bridge: Add Local Model` probes Ollama, LM Studio, llama.cpp and vLLM and registers one in a click (10.1). |
+| **VSCodium / Open VSX** | The release workflow publishes to Open VSX when `OVSX_PAT` is set; the README covers the Copilot-less case. |
 | **Browser modes** | `attach` / `launch` / `off` in settings, with an optional headless launch and a profile of its own (10.0). |
 | **Rung rows for web chats** | The Providers tab shows which rung is answering per provider and how often one stepped down (9.4). |
 | **Endpoint status and a Test button** | The Providers tab shows signed-in / no key / error per endpoint, and one click sends a real prompt (9.2, 9.3). |

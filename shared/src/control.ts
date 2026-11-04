@@ -126,6 +126,13 @@ export type ControlMsg =
    * Opt-in. `browser.mode: 'attach'` (the default) never launches anything; this
    * exists because typing the flag every morning is a real cost.
    */
+  /**
+   * Batch 10.1 — probe for a model already running on this machine.
+   *
+   * Read-only: it reports what it found and writes nothing. Registering one is the
+   * caller's decision, so a probe can never quietly change the configuration.
+   */
+  | { op: 'ctl.api.detect'; ports?: number[] }
   | {
       op: 'ctl.browser.launch';
       executablePath?: string;

@@ -116,6 +116,10 @@ jobs:
     needs: [version, verify]
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Job-level on purpose: a step's `if` cannot read its own `env`, so the
+    # conditional below would always be false if this lived on the step.
+    env:
+      OVSX_PAT: ${{ secrets.OVSX_PAT }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -140,6 +144,18 @@ jobs:
           name: ai-bridge-${{ needs.version.outputs.version }}
           path: ai-bridge-${{ needs.version.outputs.version }}.vsix
           if-no-files-found: error
+      # --- Open VSX: the gallery VSCodium reads --------------------------
+      # Skipped, not failed, when the token is absent: a fork without the secret
+      # should still get a GitHub release, and a red run here would be noise.
+      # Add OVSX_PAT under Settings → Secrets → Actions (a token from
+      # https://open-vsx.org/user-settings/tokens).
+      - name: Publish to Open VSX
+        if: ${{ env.OVSX_PAT != '' }}
+        run: |
+          npx --yes ovsx@latest publish "ai-bridge-${{ needs.version.outputs.version }}.vsix" --pat "$OVSX_PAT"
+      - name: Note the Open VSX skip
+        if: ${{ env.OVSX_PAT == '' }}
+        run: echo "OVSX_PAT is not set — skipping the Open VSX publish. Add it to reach VSCodium users."
       # --- 1. rolling build: replaced on every push -----------------------
       - name: Publish the rolling build
         uses: softprops/action-gh-release@v2

@@ -55,11 +55,21 @@ By default it never launches a browser — it uses the tab you opened. It never 
 
 ## Install
 
-**From a build:**
+**From a build:** download the `.vsix` from
+[Releases](https://github.com/drsamonline/ai-bridge/releases), then:
 
 ```bash
 code --install-extension ai-bridge-0.20.4.vsix
 ```
+
+**VSCodium, and any other VS Code fork:** the same `.vsix` installs. Once
+published, it is also on **Open VSX** — `codium --install-extension ai-bridge`.
+One difference is worth knowing: VSCodium ships no Copilot, so the chat model
+picker stays empty there. That is not a fault — use the panel at `Ctrl+Alt+A`,
+which is the primary interface anyway. And with no Copilot, a **local model**
+becomes the natural choice: `AI Bridge: Add Local Model` finds Ollama, LM Studio,
+llama.cpp or vLLM on this machine and registers it in one click — no browser, no
+key, nothing leaving the machine.
 
 **From source:**
 
@@ -168,7 +178,7 @@ suites cover it: `npm run test:api` (32 checks) and `npm run test:tools`
 
 This is an experimental project and it would be dishonest to imply otherwise.
 
-**Proven** — 913 checks across 33 suites, run on every push:
+**Proven** — 921 checks across 34 suites, run on every push:
 
 - The bridge, the CDP controller, the watchdog, the router and the state layer.
 - All three adapters and a fourth custom one, driven end to end **against fixtures**.
