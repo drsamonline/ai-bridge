@@ -79,7 +79,9 @@ function rgSearch(
     if (!opts.regex) args.push('--fixed-strings');
     args.push('--', query, '.');
 
-    execFile('rg', args, { cwd, maxBuffer: 8 * 1024 * 1024, timeout: 5000 }, (err, stdout) => {
+    // `rg` runs on every repo search, so a console window here would flash
+    // constantly on Windows.
+    execFile('rg', args, { cwd, maxBuffer: 8 * 1024 * 1024, timeout: 5000, windowsHide: true }, (err, stdout) => {
       if (err && !stdout) {
         reject(err);
         return;

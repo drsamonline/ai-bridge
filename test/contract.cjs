@@ -346,7 +346,44 @@ async function main() {
     const runner = fs.readFileSync(path.join(ROOT, 'scripts', 'run-suites.mjs'), 'utf8');
     assert.match(runner, /scripts\['test:all'\]/, 'the runner must read test:all');
   });
-  check('CI installs a browser for the CDP suites', () => assert.match(ci, /chromium/i));
+  check('no child process is spawned with a console window', () => {
+  // On Windows, a process spawned from a GUI app opens a console window unless
+  // `windowsHide: true` is passed. The RAM monitor shells out to PowerShell every
+  // few seconds, so a missing flag looks exactly like "VS Code keeps opening
+  // command prompts" — which is how this was found.
+  const offenders = [];
+  const walk = (dir) =>
+    fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true }).flatMap((entry) => {
+      const rel = path.join(dir, entry.name);
+      if (entry.isDirectory()) return walk(rel);
+      return entry.name.endsWith('.ts') ? [rel] : [];
+    });
+
+  for (const rel of [...walk('bridge/src'), ...walk('extension/src')]) {
+    const source = fs.readFileSync(path.join(ROOT, rel), 'utf8');
+    for (const match of source.matchAll(/(spawn|spawnSync|execFile|execFileSync)\s*\(/g)) {
+      // Take the call's own argument list, by balancing parentheses.
+      const open = source.indexOf('(', match.index);
+      let depth = 0;
+      let end = open;
+      for (let i = open; i < source.length; i += 1) {
+        if (source[i] === '(') depth += 1;
+        else if (source[i] === ')') {
+          depth -= 1;
+          if (depth === 0) {
+            end = i;
+            break;
+          }
+        }
+      }
+      const call = source.slice(open, end);
+      if (!/windowsHide\s*:\s*true/.test(call)) offenders.push(`${rel}: ${match[1]}`);
+    }
+  }
+
+  assert.deepEqual(offenders, [], `these spawn without windowsHide: ${offenders.join(', ')}`);
+});
+check('CI installs a browser for the CDP suites', () => assert.match(ci, /chromium/i));
   check('CI covers every test file in the repo', () => {
     const suites = fs
       .readdirSync(path.join(ROOT, 'test'))

@@ -539,3 +539,29 @@ run.
 
 The lesson is not "the packer had a bug" — it is that nothing ever tested what was
 shipped. Every other suite proves the code works; this one proves the *file* works.
+
+### 10.9 — the command windows
+
+On Windows, a process spawned from a GUI app opens a console window unless
+`windowsHide: true` is passed. Nothing in this project passed it, and the RAM
+monitor shells out to **PowerShell every few seconds**, so VS Code appeared to be
+opening command prompts continuously.
+
+Five spawns were affected, four found by reading the code and the fifth by the guard
+written to prevent a sixth:
+
+| Where | Why it flashes |
+|---|---|
+| `ram/memory.ts` → PowerShell | the RAM cap poll, every 3s |
+| `ram/memory.ts` → `ps` (×2) | same poll, other platforms |
+| `cdp/launch.ts` | the browser we start for the user |
+| `bridgeProcess.ts` | the bridge process itself — worst when a start fails and the supervisor retries |
+| `repo/vscodePorts.ts` → `rg` | every repository search |
+
+All five now pass `windowsHide: true`, and `test:contract` fails if any new
+`spawn`/`execFile` omits it — the guard balances parentheses to read each call's own
+arguments, so a neighbouring call's flag cannot satisfy it.
+
+If the polling still feels heavy on Windows, `aiBridge.watchdog.pollMs` (default
+3000) raises the interval; each poll starts PowerShell, which costs a few hundred
+milliseconds on that platform.

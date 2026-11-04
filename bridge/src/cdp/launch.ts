@@ -179,6 +179,8 @@ export async function launchBrowser(options: LaunchOptions = {}): Promise<Launch
   const child = spawn(executablePath, buildLaunchArgs({ ...options, port, profileDir }), {
     detached: true,
     stdio: 'ignore',
+    // No console window for the browser we start on the user's behalf.
+    windowsHide: true,
   });
   child.unref();
 

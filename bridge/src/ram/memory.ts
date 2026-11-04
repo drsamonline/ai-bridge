@@ -106,6 +106,7 @@ function darwinRss(pids: number[]): RssReading {
     const out = execFileSync('ps', ['-o', 'pid=,rss=', '-p', pids.join(',')], {
       encoding: 'utf8',
       timeout: 2000,
+      windowsHide: true,
     });
     for (const line of out.split('\n')) {
       const [pidRaw, kbRaw] = line.trim().split(/\s+/);
@@ -126,9 +127,13 @@ function windowsRss(pids: number[]): RssReading {
     const script =
       `Get-Process -Id ${pids.join(',')} -ErrorAction SilentlyContinue | ` +
       'Select-Object Id,WorkingSet64 | ConvertTo-Json -Compress';
+    // windowsHide is what stops a console window flashing on every poll. Without
+    // it the RAM monitor — which runs every few seconds — makes Windows look like
+    // it is opening command prompts continuously.
     const out = execFileSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', script], {
       encoding: 'utf8',
       timeout: 4000,
+      windowsHide: true,
     }).trim();
     if (out) {
       const parsed = JSON.parse(out);
@@ -181,7 +186,11 @@ export function findBrowserRootPid(port: number): number | null {
       return null;
     }
     if (os.platform() === 'darwin') {
-      const out = execFileSync('ps', ['-axo', 'pid=,command='], { encoding: 'utf8', timeout: 3000 });
+      const out = execFileSync('ps', ['-axo', 'pid=,command='], {
+        encoding: 'utf8',
+        timeout: 3000,
+        windowsHide: true,
+      });
       for (const line of out.split('\n')) {
         if (line.includes(needle)) {
           const pid = Number.parseInt(line.trim().split(/\s+/)[0] ?? '', 10);

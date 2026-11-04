@@ -82,8 +82,11 @@ export class BridgeProcess {
     const entry = this.resolveEntry();
     this.opts.onLine(`[ext] spawning bridge: node ${entry}`, 'stdout');
 
+    // `windowsHide` keeps a console window from appearing every time the bridge is
+    // spawned — which, when a start fails and the supervisor retries, is constant.
     const child = spawn(process.execPath, [entry], {
       stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
       env: {
         ...process.env,
         AI_BRIDGE_PORT: String(this.opts.port),
