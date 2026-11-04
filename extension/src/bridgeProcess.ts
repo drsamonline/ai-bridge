@@ -43,6 +43,11 @@ export class BridgeProcess {
   /** Absolute path to the compiled bridge entry. */
   resolveEntry(): string {
     const candidates = [
+      // The packaged entry first: a bundled single file that needs no node_modules
+      // beyond playwright-core. The compiled `main.js` below is the dev layout and
+      // only works inside the repo.
+      path.join(this.opts.extensionPath, 'bridge', 'dist', 'bridge.js'),
+      path.join(this.opts.extensionPath, '..', 'bridge', 'dist', 'bridge.js'),
       path.join(this.opts.extensionPath, '..', 'bridge', 'dist', 'main.js'),
       path.join(this.opts.extensionPath, 'bridge', 'dist', 'main.js'),
     ];

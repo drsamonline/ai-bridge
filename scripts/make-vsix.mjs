@@ -79,6 +79,26 @@ if (!fs.existsSync(bundle)) {
 }
 fs.mkdirSync(path.join(extStage, 'dist'), { recursive: true });
 fs.copyFileSync(bundle, path.join(extStage, 'dist', 'extension.js'));
+// The bridge is a separate process the extension spawns. It was missing from every
+// package built before this: the extension installed, activated, and then failed
+// with "bridge entry not found" — because the file was never shipped.
+const bridgeBundle = path.join(ROOT, 'bridge', 'dist', 'bridge.js');
+if (!fs.existsSync(bridgeBundle)) {
+  console.error('bridge/dist/bridge.js is missing — run `npm run build:bundle` first');
+  process.exit(1);
+}
+fs.mkdirSync(path.join(extStage, 'bridge', 'dist'), { recursive: true });
+fs.copyFileSync(bridgeBundle, path.join(extStage, 'bridge', 'dist', 'bridge.js'));
+
+// playwright-core stays outside the bridge bundle (it resolves driver files from
+// disk at runtime), so it travels as a real dependency, ~8 MB.
+const playwright = path.join(ROOT, 'node_modules', 'playwright-core');
+if (!fs.existsSync(playwright)) {
+  console.error('node_modules/playwright-core is missing — run `npm ci` first');
+  process.exit(1);
+}
+fs.cpSync(playwright, path.join(extStage, 'node_modules', 'playwright-core'), { recursive: true });
+
 if (fs.existsSync(path.join(EXT, 'media'))) {
   fs.cpSync(path.join(EXT, 'media'), path.join(extStage, 'media'), { recursive: true });
 }

@@ -506,3 +506,36 @@ catches it before the push.
 Three publish failures in a row, each one hiding behind the previous:
 unknown publisher → namespace created → invalid archive → rejected. None of them
 were visible until the one before was fixed.
+
+---
+
+## 10.8 — the shipped extension could never start
+
+The first real install reported:
+
+```
+phase → error (bridge entry not found (looked at
+  …\drsamonline.ai-bridge-vscode-0.44.0\bridge\dist\main.js))
+```
+
+The packer shipped `extension/dist/extension.js` and nothing else. The bridge is a
+**separate process** the extension spawns, and it was never in the package — so
+every installed copy activated and then died at the first command. 929 checks
+passed, because every one of them ran from the repo, where the bridge exists.
+
+Two things were wrong, not one:
+
+1. **The bridge was not shipped.** Now `bridge/dist/bridge.js` is packaged.
+2. **It could not have run if it had been.** The bridge was compiled with `tsc`, so
+   it `require`d `@ai-bridge/shared` and `ws` from `node_modules` — absent inside a
+   `.vsix`. It is now bundled by esbuild into one file, with `playwright-core` kept
+   external (it resolves driver files from disk at runtime) and shipped alongside at
+   about 8 MB. The package went from 136 KB to 2.4 MB.
+
+`test/package.cjs` is the guard, and it tests the artefact rather than the source:
+build the `.vsix`, unpack it, and **start the bridge from inside the package**,
+expecting `AI_BRIDGE_READY`. Seven checks. It would have caught this on the first
+run.
+
+The lesson is not "the packer had a bug" — it is that nothing ever tested what was
+shipped. Every other suite proves the code works; this one proves the *file* works.
