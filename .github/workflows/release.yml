@@ -116,10 +116,15 @@ jobs:
     needs: [version, verify]
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # Job-level on purpose: a step's `if` cannot read its own `env`, so the
-    # conditional below would always be false if this lived on the step.
+    # Job-level on purpose: a step's `if` cannot read its own `env`, so a
+    # conditional on OVSX_PAT would always be false if it lived on the step.
     env:
       OVSX_PAT: ${{ secrets.OVSX_PAT }}
+    permissions:
+      contents: write
+      # Trusted publishing: the workflow proves its identity with a short-lived
+      # OIDC token instead of a stored secret. Harmless when unused.
+      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -145,17 +150,30 @@ jobs:
           path: ai-bridge-${{ needs.version.outputs.version }}.vsix
           if-no-files-found: error
       # --- Open VSX: the gallery VSCodium reads --------------------------
-      # Skipped, not failed, when the token is absent: a fork without the secret
-      # should still get a GitHub release, and a red run here would be noise.
-      # Add OVSX_PAT under Settings → Secrets → Actions (a token from
-      # https://open-vsx.org/user-settings/tokens).
+      # Two phases, because the registry requires the extension to exist before a
+      # trusted publisher can be registered for it:
+      #
+      #   1. first publish — OVSX_PAT set, and the CLI uses it (a token always
+      #      takes precedence);
+      #   2. after registering the trusted publisher at
+      #      https://open-vsx.org/user-settings/trusted-publishers and DELETING the
+      #      secret — no token is present, so the CLI exchanges the workflow's OIDC
+      #      identity for a five-minute publishing token.
+      #
+      # Deleting the secret is not optional: while it exists, it wins and the
+      # workflow is not actually using trusted publishing.
+      #
+      # `--skip-duplicate` keeps a re-run of the same version from failing.
       - name: Publish to Open VSX
-        if: ${{ env.OVSX_PAT != '' }}
+        continue-on-error: true
         run: |
-          npx --yes ovsx@latest publish "ai-bridge-${{ needs.version.outputs.version }}.vsix" --pat "$OVSX_PAT"
-      - name: Note the Open VSX skip
+          npx --yes ovsx@latest publish "ai-bridge-${{ needs.version.outputs.version }}.vsix" --skip-duplicate
+      - name: Explain an Open VSX skip
         if: ${{ env.OVSX_PAT == '' }}
-        run: echo "OVSX_PAT is not set — skipping the Open VSX publish. Add it to reach VSCodium users."
+        run: |
+          echo "No OVSX_PAT: this run used trusted publishing if a registration exists."
+          echo "Before the first publish or the registration, the publish above fails softly."
+          echo "See https://open-vsx.org/user-settings/trusted-publishers"
       # --- 1. rolling build: replaced on every push -----------------------
       - name: Publish the rolling build
         uses: softprops/action-gh-release@v2

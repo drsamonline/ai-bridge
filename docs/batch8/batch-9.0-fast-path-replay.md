@@ -356,3 +356,39 @@ Static compatibility with VSCodium is good: the extension uses only standard
 ships no Copilot, so the contributed chat models have no host — the panel at
 `Ctrl+Alt+A` is the interface there, and the code already treats the LM API as
 optional. Not proven: a real VSCodium run.
+
+---
+
+## 10.2 — trusted publishing to Open VSX
+
+**Status: workflow changed, first publish still needs a token.**
+
+Open VSX now supports trusted publishing: a CI workflow proves its identity with a
+short-lived OIDC token and receives a publishing credential that expires in about
+five minutes and is scoped to one extension. Nothing long-lived is stored.
+
+The registry's precondition is the part people trip over: **a trusted publisher can
+only be registered for an extension that already exists with an active version**.
+So there are two phases, and the workflow handles both:
+
+1. **First publish** — `OVSX_PAT` is set, and the CLI uses it. A token always takes
+   precedence, so this path cannot be broken by the change.
+2. **Every publish after that** — register the workflow at
+   `open-vsx.org/user-settings/trusted-publishers` (owner `drsamonline`, repo
+   `ai-bridge`, workflow `release.yml`), then **delete the secret**. With no token
+   present, `ovsx` exchanges the workflow's OIDC identity for the short-lived
+   credential.
+
+Deleting the secret is not optional. While it exists it wins, and the workflow is
+not actually using trusted publishing — which is exactly the state that looks
+migrated and is not.
+
+The job gained `id-token: write`. The publish step is `continue-on-error` until the
+registration exists, so a release is never red simply because publishing is not set
+up yet.
+
+Two things this does not fix, stated because the name oversells it: whoever can
+change or trigger `release.yml` can publish, so branch protection and workflow
+review now carry the weight the token used to. And a registration is bound to a
+workflow file, not to a branch — pin an environment with required reviewers if it
+matters.

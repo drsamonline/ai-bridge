@@ -18,7 +18,7 @@ The batch-8 free-tier line is **complete**: eleven items landed across 0.21.0 �
 | **Images** | Sent as inline `data:` URLs when the endpoint declares `imageInput`; refused with `ENOIMAGE` naming the model when it does not (9.1). |
 | **Windows transport** | A local socket replaces TCP loopback, and the token is no longer written to disk (9.5). |
 | **Local models** | `AI Bridge: Add Local Model` probes Ollama, LM Studio, llama.cpp and vLLM and registers one in a click (10.1). |
-| **VSCodium / Open VSX** | The release workflow publishes to Open VSX when `OVSX_PAT` is set; the README covers the Copilot-less case. |
+| **VSCodium / Open VSX** | The release workflow publishes to Open VSX — with `OVSX_PAT` on the first publish, then trusted publishing (OIDC, no stored secret) once the registration exists. The README covers the Copilot-less case. |
 | **Browser modes** | `attach` / `launch` / `off` in settings, with an optional headless launch and a profile of its own (10.0). |
 | **Rung rows for web chats** | The Providers tab shows which rung is answering per provider and how often one stepped down (9.4). |
 | **Endpoint status and a Test button** | The Providers tab shows signed-in / no key / error per endpoint, and one click sends a real prompt (9.2, 9.3). |
@@ -31,7 +31,11 @@ The batch-8 free-tier line is **complete**: eleven items landed across 0.21.0 �
    cURL into one; [`batch8/capture-a-template.md`](batch8/capture-a-template.md)
    is the longer procedure. This is the single highest-value thing left.
 2. **Live selectors** for the three web chats — fixtures only so far.
-3. **Launch mode** — the browser launcher is tested for its arguments and its
+3. **Open VSX first publish** — the workflow is ready for trusted publishing, but
+   the extension does not exist on the registry yet, and the registry requires an
+   existing version before a trusted publisher can be registered. One publish with
+   a token, then delete the token.
+4. **Launch mode** — the browser launcher is tested for its arguments and its
    failure paths, never against a real browser. Nothing has started one yet.
 4. **Editor surfaces** — Copilot rendering, the SCM commit button, the diff view,
    the report file write. Wired and smoke-tested; never seen in a real editor.
