@@ -74,8 +74,16 @@ check('the rolling build is a pre-release, so it never outranks a version', () =
   assert.match(rolling, /make_latest: false/);
 });
 check('it tests before publishing', () => {
-  assert.match(release, /npm run test:all/);
-  assert.ok(release.indexOf('test:all') < release.indexOf('action-gh-release'), 'tests must run before the release step');
+  // Either the plain chain or the bounded runner, which executes the same list
+  // from test:all — the point of the check is that tests run at all, and run
+  // before the release step.
+  assert.match(release, /npm run test:all|run-suites\.mjs/);
+  const testsAt = Math.min(
+    ...[/npm run test:all/, /run-suites\.mjs/]
+      .map((pattern) => release.search(pattern))
+      .filter((index) => index >= 0),
+  );
+  assert.ok(testsAt < release.indexOf('action-gh-release'), 'tests must run before the release step');
 });
 check('it needs write permission for contents', () => assert.match(release, /contents:\s*write/));
 
@@ -103,7 +111,8 @@ check('Pages checks its assets before deploying', () => {
   assert.match(pages, /docs\/screenshots\/chat-panel\.png/);
 });
 
-check('CI still runs the whole suite', () => assert.match(ci, /npm run test:all/));
+check('CI still runs the whole suite', () =>
+  assert.match(ci, /npm run test:all|run-suites\.mjs/));
 
 /* ------------------------------- portability guard for the browser tests */
 check('no browser test loads the page over file://', () => {
