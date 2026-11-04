@@ -38,7 +38,12 @@ jobs:
         run: node test/contract.cjs
 
       - name: Full suite
-        run: npm run test:all
+        run: |
+          npm run build
+          npm run build:bundle
+          # Bounded per suite: a hang names itself instead of consuming the job
+          # timeout in silence, which is what launch.cjs did for 27 minutes.
+          node scripts/run-suites.mjs --timeout=200
 
       - name: Upload evidence
         if: always()

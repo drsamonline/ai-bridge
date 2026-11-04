@@ -103,14 +103,18 @@ console.log('');
   });
 
   await check('failure: an unusable profile folder is reported', async () => {
+    // A path *under a regular file* cannot be a directory (ENOTDIR): deterministic,
+    // instant, and no spawn. The previous version pointed at /proc and spawned a
+    // real binary, then waited on port 9 — which hung for 27 minutes in CI while
+    // the whole suite sat silent.
     const result = await launch.launchBrowser({
-      executablePath: process.execPath, // a real binary, but not a browser
-      profileDir: '/proc/definitely-not-writable/profile',
+      executablePath: '/nonexistent/browser-that-is-not-there',
+      profileDir: require('node:path').join(__filename, 'nested'),
       port: 9,
       timeoutMs: 300,
     });
     assert.equal(result.ok, false);
-    assert.match(result.error, /ECANNOTPROFILE|ENOPORT|ESPAWN/);
+    assert.match(result.error, /ECANNOTPROFILE|ESPAWN/);
   });
 
   console.log('');

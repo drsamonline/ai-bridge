@@ -336,7 +336,16 @@ async function main() {
   const ciPath = path.join(ROOT, '.github', 'workflows', 'ci.yml');
   check('a CI workflow exists', () => assert.ok(fs.existsSync(ciPath), 'no .github/workflows/ci.yml'));
   const ci = fs.existsSync(ciPath) ? fs.readFileSync(ciPath, 'utf8') : '';
-  check('CI runs the full suite', () => assert.match(ci, /npm run test:all/));
+  check('CI runs the full suite', () =>
+    // Either the plain chain, or the bounded runner that executes the same list.
+    // The runner is preferred in CI because a hang names itself instead of
+    // consuming the job timeout in silence.
+    assert.match(ci, /npm run test:all|run-suites\.mjs/));
+  check('the suite runner takes its list from test:all, not a subset', () => {
+    // Otherwise "bounded runner" would be a way to quietly run less.
+    const runner = fs.readFileSync(path.join(ROOT, 'scripts', 'run-suites.mjs'), 'utf8');
+    assert.match(runner, /scripts\['test:all'\]/, 'the runner must read test:all');
+  });
   check('CI installs a browser for the CDP suites', () => assert.match(ci, /chromium/i));
   check('CI covers every test file in the repo', () => {
     const suites = fs

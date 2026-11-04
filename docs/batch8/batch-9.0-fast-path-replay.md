@@ -426,3 +426,37 @@ verification at all, so the first publish is one fewer thing to get wrong.
 The packer's fallback publisher was changed with it — a missing `publisher` field
 would otherwise have published under the old id and produced an extension nobody
 expected.
+
+---
+
+## 10.5 — the suite that ate 27 minutes in silence
+
+The release job sat in `Full suite` for 27 minutes with no output, and the only
+clue was that the log simply stopped. Reading the job log at the point it went
+quiet named it: `test/launch.cjs`, in the check *after* "a binary that does not
+exist is reported".
+
+That check spawned a real binary and then waited for a debugging port to answer.
+Locally it returned in milliseconds; on the runner it never came back. It now
+points at a path *under a regular file* — `ENOTDIR` — which is deterministic,
+instant, and spawns nothing.
+
+The deeper problem was the shape of the run, not the one test:
+
+- a chain of `a && b && c` prints no progress, so a hang is indistinguishable from
+  a slow suite;
+- it has no bound, so one stuck suite consumes the whole job's timeout;
+- when it dies, nothing says which suite did it.
+
+`scripts/run-suites.mjs` replaces the chain in CI. It reads the suite list from
+**`test:all`** — so it stays an executor and `test:all` stays the single source of
+truth — prints `[7/34] fastpath ok (1.2s)`, and caps each suite at 200s. A hang now
+prints `TIMEOUT after 200s` and names the file.
+
+`test:contract` was updated rather than bypassed: it accepts either the plain chain
+or the runner, and gained a check that the runner **reads `test:all`** — otherwise
+"bounded runner" would be a tidy way to quietly run a subset.
+
+Also worth recording: the 0.40.0 run was not stuck at all. It was cancelled —
+by me, when a force-cancel aimed at the previous run landed on the one in progress.
+The stuck one was 0.38.0.
