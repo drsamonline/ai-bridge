@@ -120,6 +120,13 @@
   .facts span { font-size: 12.5px; color: var(--muted); }
   @media (max-width: 760px) { .facts { grid-template-columns: repeat(2, 1fr); } }
 
+  /* the product, on the page: the four screenshots the extension ships */
+  .shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+  .shots figure { margin: 0; background: var(--card); border: 1px solid var(--line);
+                  border-radius: 5px; overflow: hidden; }
+  .shots img { display: block; width: 100%; height: auto; border-bottom: 1px solid var(--line); }
+  .shots figcaption { padding: 11px 14px 13px; font-size: 13px; color: var(--muted); }
+  .shots figcaption b { display: block; color: var(--ink); font-weight: 600; font-size: 13.5px; margin-bottom: 2px; }
   section { padding: 60px 0 0; }
   h2 { font-size: 11.5px; font-family: var(--mono); letter-spacing: .16em; text-transform: uppercase;
        color: var(--muted); margin: 0 0 22px; font-weight: 500; display: flex; align-items: center; gap: 12px; }
@@ -175,6 +182,7 @@
     <nav>
       <a href="#how">How it works</a>
       <a href="#what">What it refuses</a>
+      <a href="#see">See it</a>
       <a href="#tokens">Tokens</a>
       <a href="#install">Install</a>
     </nav>
@@ -274,6 +282,28 @@
       <div><b>500 MB</b><span>browser cap, with a 3-second watchdog</span></div>
       <div><b>6</b><span>settings tabs, every field with inline validation</span></div>
       <div><b>≤4k</b><span>boot prompt that restores a fresh chat</span></div>
+    </div>
+  </section>
+
+  <section id="see">
+    <h2>What it looks like</h2>
+    <div class="shots">
+      <figure>
+        <img src="screenshots/chat-panel.png" alt="The AI Bridge chat panel in VS Code, with a diff proposal waiting for review" loading="lazy" width="1600" height="1000">
+        <figcaption><b>Chat, with a diff you can refuse</b>Every change arrives as a proposal — untick a hunk, accept the rest.</figcaption>
+      </figure>
+      <figure>
+        <img src="screenshots/settings-providers.png" alt="Settings, providers tab: the signed-in providers the bridge can drive" loading="lazy" width="1600" height="1000">
+        <figcaption><b>Providers</b>Which signed-in tab to drive, and which one to fall back to.</figcaption>
+      </figure>
+      <figure>
+        <img src="screenshots/settings-router.png" alt="Settings, router tab: the failover order and the boot prompt" loading="lazy" width="1600" height="1000">
+        <figcaption><b>Router</b>The failover order, and the boot prompt that restores a fresh chat.</figcaption>
+      </figure>
+      <figure>
+        <img src="screenshots/settings-performance.png" alt="Settings, performance tab: token counts, browser cap and watchdog" loading="lazy" width="1600" height="1000">
+        <figcaption><b>Performance</b>Token counts measured here, the 500 MB browser cap, the 3-second watchdog.</figcaption>
+      </figure>
     </div>
   </section>
 

@@ -39,8 +39,13 @@ jobs:
       - name: Check the page and its assets
         run: |
           test -f docs/index.html || (echo "docs/index.html missing" && exit 1)
-          test -f docs/screenshots/chat-panel.png || (echo "screenshot missing" && exit 1)
-          grep -q 'screenshots/chat-panel.png' docs/index.html
+          # The page must SHOW the product, but which screenshot it shows is the page's
+          # business. This used to name one file (screenshots/chat-panel.png) and went red
+          # the moment the landing page was redesigned without it - so the new page was
+          # never published. Assert the shape instead: at least one screenshot, and the
+          # loop below proves every one it names exists inside docs/.
+          shots=$(grep -oE 'src="screenshots/[^"]+\.png"' docs/index.html | wc -l)
+          test "$shots" -ge 1 || (echo "the landing page shows no product screenshot" && exit 1)
           # `docs/` IS the site root, so every relative asset the page references
           # must exist inside it. A path that escapes the root — ../extension/...
           # — resolves to nothing on Pages, which is how the icon broke.
