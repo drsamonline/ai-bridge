@@ -19,6 +19,7 @@ import type {
   RamLevel,
 } from '@ai-bridge/shared';
 import { CdpController } from '../cdp/controller';
+import { Relay, type SwitchRecord } from './relay';
 import { candidateBrowsers, detectBrowserPath, launchBrowser } from '../cdp/launch';
 import { detectLocalModels } from '../api/local';
 import { DEFAULT_PORTS } from '../cdp/discovery';
@@ -54,12 +55,6 @@ import { DOM_SHAPE_SNIPPET } from '@ai-bridge/shared';
 import { isStreamingAdapter } from '../adapters/types';
 import { looksLikeSignIn, signInError } from '../adapters/signin';
 import type { Logger } from '../logger';
-
-export interface SwitchRecord {
-  from: string;
-  to: string;
-  reason: 'limit' | 'switch';
-}
 
 export interface RuntimeOptions {
   log: Logger;
@@ -123,6 +118,8 @@ export class BridgeRuntime {
   readonly adapters: AdapterRegistry;
   readonly router: Router;
   readonly bus = new EventEmitter();
+  /** Dispatch and observation, split out in step 2 of the runtime split. */
+  private readonly relay: Relay;
 
   constructor(private readonly opts: RuntimeOptions) {
     const log = opts.log;
@@ -175,6 +172,18 @@ export class BridgeRuntime {
     });
     this.fastFetch = opts.apiFetchImpl ?? fetch;
 
+    // Step 2 of the runtime split: dispatch and observation live in their own
+    // module now. Built last, because it needs the controller, adapters, rungs,
+    // router and fetch that the lines above created.
+    this.relay = new Relay({
+      controller: this.controller,
+      adapters: this.adapters,
+      log: log.child('relay'),
+      rungs: this.rungs,
+      router: this.router,
+      fastFetch: this.fastFetch,
+    });
+
     this.wire();
   }
 
@@ -202,7 +211,6 @@ export class BridgeRuntime {
   get level(): RamLevel {
     return this.watchdog.level;
   }
-
   start(): void {
     this.watchdog.start();
     this.monitor.start();
@@ -254,31 +262,21 @@ export class BridgeRuntime {
     };
   }
 
-  /** §4 `navigate`: put the owned tab on the adapter's site. */
+
+
+
   async navigate(msg: { adapterId: string; url: string }): Promise<{ url: string }> {
-    const page = this.requirePage();
-    await page.goto(msg.url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
-    this.opts.log.info('navigated', { adapterId: msg.adapterId, url: page.url() });
-    return { url: page.url() };
+    return this.relay.navigate(msg);
   }
 
   /** §4 `send`: write the prompt into the composer and submit. */
   async send(msg: { adapterId: string; text: string }): Promise<{ sent: true; chars: number }> {
-    const page = this.requirePage();
-    const adapter = await this.adapters.get(msg.adapterId);
-    if (!(await adapter.isReady(page))) await adapter.connect(page);
-    const limit = await adapter.detectLimit(page);
-    if (limit.limited) throw new Error(this.limitMessage(msg.adapterId, limit));
-    await adapter.sendPrompt(page, msg.text);
-    return { sent: true, chars: msg.text.length };
+    return this.relay.send(msg);
   }
 
   /** §4 `observe`: wait for the settled answer (no deltas). */
   async observe(msg: { adapterId: string; debounceMs: number }): Promise<{ text: string }> {
-    const page = this.requirePage();
-    const adapter = await this.adapters.get(msg.adapterId);
-    const text = await adapter.observeResponse(page, { debounceMs: msg.debounceMs });
-    return { text };
+    return this.relay.observe(msg);
   }
 
   /**
@@ -337,7 +335,7 @@ export class BridgeRuntime {
       // this build has no adapter for: the template is the definition then.
       const template = this.fastpath.get(adapterId);
       if (template?.enabled) {
-        const answered = await this.tryRungs(adapterId, template, msg, push, exhausted);
+        const answered = await this.relay.tryRungs(adapterId, template, msg, push, exhausted);
         if (answered) return answered;
       }
 
@@ -346,7 +344,7 @@ export class BridgeRuntime {
       try {
         if (isSwitch || !page) {
           // A switch means a NEW page: the old one is limit-bound.
-          page = await this.openProviderPage(adapterId, adapter);
+          page = await this.relay.openProviderPage(adapterId, adapter);
           const reason = lastError && /ELIMIT/.test(lastError.message) ? 'limit' : 'switch';
           if (currentId) {
             switched.push({ from: currentId, to: adapterId, reason });
@@ -368,7 +366,7 @@ export class BridgeRuntime {
             // §6.2 delta-only: after the boot, only what changed is re-sent.
             const composed = composeBoot(msg.boot, msg.delta);
             bootChars = composed.length;
-            const injected = await this.sendAndObserve(adapter, page, composed, {
+            const injected = await this.relay.sendAndObserve(adapter, page, composed, {
               debounceMs: msg.debounceMs,
               timeoutMs: msg.timeoutMs,
               push,
@@ -410,13 +408,13 @@ export class BridgeRuntime {
             resetAt: limit.resetAt,
             cooldownMs: cooldown,
           });
-          lastError = new Error(this.limitMessage(adapterId, limit));
+          lastError = new Error(this.relay.limitMessage(adapterId, limit));
           currentId = adapterId;
           continue;
         }
 
         const tabId = this.controller.status().tabs.slice(-1)[0]?.id ?? null;
-        const result = await this.sendAndObserve(adapter, page, msg.text, {
+        const result = await this.relay.sendAndObserve(adapter, page, msg.text, {
           debounceMs: msg.debounceMs,
           timeoutMs: msg.timeoutMs,
           push,
@@ -480,187 +478,10 @@ export class BridgeRuntime {
    * the DOM path. The cascade is the point: a challenge on the fast rung is not
    * an error, it is a reason to try the next one.
    */
-  private async tryRungs(
-    adapterId: string,
-    template: FastPathTemplate,
-    msg: { text: string },
-    push: (kind: ControlEventKind, data: unknown) => void,
-    exhausted: Set<string>,
-  ): Promise<(PromptResult & { switched: SwitchRecord[] }) | null> {
-    const log = this.opts.log;
-    const page = this.controller.activePage;
-    const candidates: Rung[] = page ? ['fast', 'replay', 'dom'] : ['fast', 'dom'];
-    const available = candidates.filter((rung) => !exhausted.has(`${adapterId}:${rung}`));
-    const preferred = this.rungs.choose(adapterId, available);
-    if (!preferred) return null;
 
-    // The remembered rung first, then the rest in cost order.
-    const order = [preferred, ...available.filter((rung) => rung !== preferred)];
-    const startedAt = Date.now();
-    let firstTokenMs: number | null = null;
 
-    for (const rung of order) {
-      if (rung === 'dom') return null;
 
-      const parts: string[] = [];
-      push('stream.start', {
-        adapterId,
-        phase: 'prompt',
-        rung,
-        prompt: msg.text.slice(0, 200),
-      });
 
-      try {
-        const source =
-          rung === 'fast'
-            ? attemptFast(template, { prompt: msg.text }, { fetchImpl: this.fastFetch })
-            : replayInPage(page as never, {
-                url: template.url,
-                method: template.method ?? 'POST',
-                headers: { 'Content-Type': 'application/json', ...(template.headers ?? {}) },
-                body: renderTemplate(template.bodyTemplate, { prompt: msg.text }),
-              });
-
-        for await (const chunk of source) {
-          if (firstTokenMs === null) firstTokenMs = Date.now() - startedAt;
-          parts.push(chunk);
-          push('stream.delta', {
-            adapterId,
-            rung,
-            text: chunk,
-            elapsedMs: Date.now() - startedAt,
-          });
-        }
-
-        const text = parts.join('');
-        if (!text.trim()) throw new Error('EFAST: the fast path returned nothing');
-
-        const totalMs = Date.now() - startedAt;
-        this.rungs.record(adapterId, rung);
-        this.router.markSuccess(adapterId);
-        push('stream.end', {
-          adapterId,
-          rung,
-          totalMs,
-          firstTokenMs,
-          chars: text.length,
-        });
-        log.info(`fastpath: ${adapterId} answered on the ${rung} rung`, {
-          firstTokenMs,
-          totalMs,
-          chars: text.length,
-        });
-
-        return {
-          adapterId,
-          text,
-          firstTokenMs,
-          totalMs,
-          // The stream's own terminator settled it, which is what 'sentinel'
-          // means everywhere else in this file.
-          settledBy: 'sentinel',
-          tabId: null,
-          turns: this.controller.status().turns,
-          // Nothing was switched away from: this provider answered.
-          switched: [],
-        };
-      } catch (err) {
-        // A challenge is a reason to move down a rung, not a failure of the
-        // provider — and not something the user should see.
-        const challenge = err instanceof ChallengeError ? err.detection.verdict : null;
-        const error = err instanceof Error ? err : new Error(String(err));
-        this.rungs.recordFallThrough(adapterId, rung);
-        exhausted.add(`${adapterId}:${rung}`);
-        push('stream.end', { adapterId, rung, failed: error.name });
-        log.warn(
-          `fastpath: ${adapterId} ${rung} did not answer${challenge ? ` (${challenge})` : ''} — ${error.message}`,
-        );
-      }
-    }
-
-    return null;
-  }
-
-  /** Send one message and observe the settled answer, emitting stream events. */
-  private async sendAndObserve(
-    adapter: Adapter,
-    page: Page,
-    text: string,
-    opts: {
-      debounceMs?: number;
-      timeoutMs?: number;
-      push: (kind: ControlEventKind, data: unknown) => void;
-      adapterId: string;
-      phase: 'boot' | 'prompt';
-    },
-  ): Promise<{ text: string; firstTokenMs: number | null; totalMs: number; settledBy: string }> {
-    const startedAt = Date.now();
-    const tabId = this.controller.status().tabs.slice(-1)[0]?.id ?? null;
-    opts.push('stream.start', {
-      adapterId: opts.adapterId,
-      tabId,
-      phase: opts.phase,
-      prompt: text.slice(0, 200),
-    });
-
-    await adapter.sendPrompt(page, text);
-
-    let lastEmit = 0;
-    const onDelta = (partial: string, meta: { elapsedMs: number; streaming: boolean }) => {
-      const now = Date.now();
-      if (now - lastEmit < 50 && meta.streaming) return;
-      lastEmit = now;
-      opts.push('stream.delta', {
-        adapterId: opts.adapterId,
-        tabId,
-        phase: opts.phase,
-        text: partial,
-        elapsedMs: meta.elapsedMs,
-      });
-    };
-
-    if (isStreamingAdapter(adapter)) {
-      return adapter.observeStreaming(page, {
-        debounceMs: opts.debounceMs,
-        timeoutMs: opts.timeoutMs,
-        onDelta,
-      });
-    }
-    const settled = await adapter.observeResponse(page, { debounceMs: opts.debounceMs ?? 900 });
-    onDelta(settled, { elapsedMs: Date.now() - startedAt, streaming: false });
-    return {
-      text: settled,
-      firstTokenMs: settled ? Date.now() - startedAt : null,
-      totalMs: Date.now() - startedAt,
-      settledBy: 'no-stream',
-    };
-  }
-
-  /** Open a fresh owned tab on a provider's site and make it ready. */
-  private async openProviderPage(adapterId: string, adapter: Adapter) {
-    const entry = this.adapters.list().find((e) => e.id === adapterId);
-    const url = entry?.url ?? 'about:blank';
-    await this.controller.newTab(url);
-    const page = this.controller.activePage;
-    if (!page) throw new Error(`ENOPAGE: could not open a tab for ${adapterId}`);
-    await adapter.connect(page);
-    return page;
-  }
-
-  private limitMessage(adapterId: string, limit: { kind?: string; resetAt?: number }): string {
-    const when = limit.resetAt
-      ? ` (resets in ${Math.max(1, Math.round((limit.resetAt - Date.now()) / 60000))} min)`
-      : '';
-    return `ELIMIT: ${adapterId} is ${limit.kind ?? 'limited'}${when} — failover lands in batch 5.1/6.1`;
-  }
-
-  private requirePage() {
-    const page = this.controller.activePage;
-    if (!page) {
-      throw new Error('ENOTAB: no owned tab — attach and open a tab first');
-    }
-    return page;
-  }
 
   /** Full status block for the status bar and the Providers/Performance tabs. */
   status(): unknown {
@@ -876,7 +697,7 @@ export class BridgeRuntime {
         for (const spec of candidates.slice(0, 1)) {
           try {
             const adapter = await this.adapters.get(spec.id);
-            await this.openProviderPage(spec.id, adapter);
+            await this.relay.openProviderPage(spec.id, adapter);
             warmed.push(spec.id);
             log.info(`router: pre-warmed ${spec.id}`);
           } catch (err) {
