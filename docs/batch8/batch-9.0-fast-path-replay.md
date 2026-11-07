@@ -586,3 +586,35 @@ explaining why.
 Auto-detection is best-effort for Helium and Thorium, whose install locations vary.
 A miss is not fatal — `aiBridge.browser.exePath` overrides the whole search, and the
 field's help now says so.
+
+---
+
+## 10.11 — the doctor
+
+Four failures in a row were all "a prerequisite is missing", not "the logic is
+wrong": the bridge file was not in the package, the browser was not found, the
+namespace did not exist, the console windows were not hidden. Each one cost a round
+trip, because the message said *it failed* rather than *this is what is absent*.
+
+`AI Bridge: Diagnose` asks the questions in one place and opens a markdown report
+you can paste:
+
+- the extension version and the resolved bridge entry path;
+- whether `playwright-core` resolves from the extension's own tree;
+- the Node runtime the bridge will use;
+- `browser.mode`, and which browser launch mode would pick (via a new read-only
+  `ctl.browser.probe` — the extension cannot import bridge code, and probing must
+  not start anything);
+- the bridge phase, and whether the lock file is readable.
+
+Two judgements are baked in and tested:
+
+- **a missing bridge entry is a failure, not a warning** — it is the bug that
+  shipped, and a doctor that called it a warning would be useless;
+- **not finding a browser in *attach* mode is only a warning** — there the user
+  starts it themselves, so a miss in the usual install locations proves nothing.
+  In *launch* mode the same fact is a failure, because we are the one supposed to
+  start it.
+
+`test:doctor` (10 checks) drives the report from fixed facts, which is the only
+reason it can be trusted: no editor, no machine, no browser.

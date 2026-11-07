@@ -19,7 +19,7 @@ import type {
   RamLevel,
 } from '@ai-bridge/shared';
 import { CdpController } from './cdp/controller';
-import { launchBrowser } from './cdp/launch';
+import { candidateBrowsers, detectBrowserPath, launchBrowser } from './cdp/launch';
 import { detectLocalModels } from './api/local';
 import { DEFAULT_PORTS } from './cdp/discovery';
 import { RamMonitor } from './ram/monitor';
@@ -706,6 +706,14 @@ export class BridgeRuntime {
   async control(msg: ControlMsg): Promise<unknown> {
     const log = this.opts.log;
     switch (msg.op) {
+      case 'ctl.browser.probe': {
+        // Read-only: reports what launch mode would use, and starts nothing.
+        const found = detectBrowserPath();
+        return {
+          executablePath: found ?? null,
+          candidates: candidateBrowsers(),
+        };
+      }
       case 'ctl.browser.launch': {
         // Batch 10.0: the one place the bridge starts a browser. Everything after
         // this is the ordinary attach path, unchanged.

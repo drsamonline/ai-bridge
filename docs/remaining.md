@@ -1,6 +1,6 @@
 # What is left
 
-**932 checks across 34 suites, all green** — verified locally and re-run by CI on
+**942 checks across 35 suites, all green** — verified locally and re-run by CI on
 every push. (Sum of each suite's own reported total; `compression-bench` writes a
 report instead of counting.)
 
@@ -28,7 +28,10 @@ The batch-8 free-tier line is **complete**: eleven items landed across 0.21.0 �
 
 Ordered by what unblocks the most.
 
-1. **Install 0.47.0 and confirm the bridge starts.** Everything below depends on
+0. **If anything fails, run `AI Bridge: Diagnose` first.** It checks the extension
+   version, the bridge entry, playwright-core, the browser, the mode, the lock file
+   and the bridge phase, and prints what is missing with what to do about it.
+1. **Install 0.48.0 and confirm the bridge starts.** Everything below depends on
    this, and it has never worked on a real machine. Until 0.45.0 the `.vsix` did
    not contain the bridge at all, so every install activated and died at the first
    command; 0.46.0 stopped the console windows; 0.47.0 added Chromium forks.

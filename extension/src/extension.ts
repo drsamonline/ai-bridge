@@ -21,6 +21,7 @@ import {
   type ServiceBridge,
   templateFromCurl,
 } from './features';
+import { buildReport as buildDoctorReport } from './diagnostics/doctor';
 import {
   FIX_SCHEME,
   FixPreviewProvider,
@@ -2089,6 +2090,69 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('aiBridge.bridge.reconnect', async () => {
       client.close();
       await handshakeOnce();
+    }),
+    vscode.commands.registerCommand('aiBridge.diagnose', async () => {
+      // Batch 10.11: every failure so far was a missing prerequisite, and each one
+      // cost a round trip because the message said "it failed", not what was absent.
+      const config = cfg();
+      const browserMode = config.get<string>('browser.mode', 'attach');
+
+      let bridgeEntry: { ok: true; path: string } | { ok: false; error: string };
+      try {
+        bridgeEntry = { ok: true, path: bridge.resolveEntry() };
+      } catch (err) {
+        bridgeEntry = { ok: false, error: (err as Error).message };
+      }
+
+      let playwright = false;
+      try {
+        require.resolve('playwright-core', { paths: [context.extensionPath] });
+        playwright = true;
+      } catch {
+        playwright = false;
+      }
+
+      let browser: { found: boolean; path?: string; exePath?: string } = {
+        found: false,
+        ...(config.get<string>('browser.exePath', '')
+          ? { exePath: config.get<string>('browser.exePath', '') }
+          : {}),
+      };
+      if (phase === 'ready') {
+        const probe = (await client.request({ op: 'ctl.browser.probe' }).catch(() => null)) as {
+          executablePath?: string | null;
+        } | null;
+        browser = probe?.executablePath
+          ? { found: true, path: probe.executablePath }
+          : { found: false, ...(browser.exePath ? { exePath: browser.exePath } : {}) };
+      }
+
+      let lock: { readable: boolean; socket?: string; error?: string };
+      try {
+        const read = readLock();
+        lock = { readable: true, ...(read.lock.socket ? { socket: read.lock.socket } : {}) };
+      } catch (err) {
+        lock = { readable: false, error: (err as Error).message };
+      }
+
+      const report = buildDoctorReport({
+        extensionVersion: String(context.extension.packageJSON.version ?? 'unknown'),
+        bridgeEntry,
+        playwright,
+        nodeVersion: process.version,
+        browserMode,
+        browser,
+        bridgePhase: phase,
+        lock,
+        platform: process.platform,
+      });
+
+      const doc = await vscode.workspace.openTextDocument({
+        content: report.markdown,
+        language: 'markdown',
+      });
+      await vscode.window.showTextDocument(doc, { preview: false });
+      write(report.ok ? 'info' : 'warn', `diagnose: ${report.checks.filter((c) => c.status === 'fail').length} failing check(s)`);
     }),
     vscode.commands.registerCommand('aiBridge.bridge.showLog', () => {
       output.show(true);

@@ -133,6 +133,11 @@ export type ControlMsg =
    * caller's decision, so a probe can never quietly change the configuration.
    */
   | { op: 'ctl.api.detect'; ports?: number[] }
+  /**
+   * Batch 10.11 — which browser launch mode would use, without starting it.
+   * The doctor needs this and the extension cannot import bridge code.
+   */
+  | { op: 'ctl.browser.probe' }
   | {
       op: 'ctl.browser.launch';
       executablePath?: string;
