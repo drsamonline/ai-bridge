@@ -184,9 +184,16 @@ Step 4 is the first step allowed to change behaviour.
 1. **Extract `runtime/index.ts`.** Pure move of §1's rows into the new file, no
    logic edits. Every existing suite must pass untouched. If a test needs editing
    here, the move was wrong.
+   *Landed — `a442425`. One deviation: three suites `require` the compiled path
+   `dist/runtime.js`, which no longer exists; the require strings were updated and
+   no assertion changed.*
 2. **Extract `relay.ts`.** Move `tryRungs`, `sendAndObserve`, `openProviderPage`,
    `requirePage`, `navigate`, `send`, `observe` verbatim. `prompt()` still calls
    them in the same order; only its new home differs. Suite stays green.
+   *Landed — `5ce6d12`. Extracted by line range rather than retyped, so the diff
+   is `this.X` → `this.ctx.X` and nothing else. `SwitchRecord` moved with it.
+   `prompt()`'s chain walk deliberately stayed behind: step 4 replaces that policy,
+   so moving it now would mean moving it twice.*
 3. **Add `stateMachine.ts` and `session.ts` with unit tests.** Wire them behind
    `wire()` but leave the debate path unused. New tests only, no existing test
    touched.
