@@ -85,6 +85,36 @@ console.log('');
     assert.ok(launch.candidateBrowsers('linux').some((p) => p.includes('chromium')));
   });
 
+  await check('detect: Chromium forks are offered too', () => {
+    // Any Chromium answers the debugging protocol, and several are lighter than
+    // Chrome — which is the point of launch mode.
+    const win = launch.candidateBrowsers('win32', {
+      PROGRAMFILES: 'C:\\Program Files',
+      LOCALAPPDATA: 'C:\\Users\\x\\AppData\\Local',
+    });
+    for (const needle of ['brave.exe', 'vivaldi.exe', 'helium.exe', 'thorium.exe']) {
+      assert.ok(win.some((p) => p.endsWith(needle)), `${needle} missing on win32`);
+    }
+    for (const needle of ['Brave Browser', 'Vivaldi', 'Helium', 'Thorium']) {
+      assert.ok(
+        launch.candidateBrowsers('darwin').some((p) => p.includes(needle)),
+        `${needle} missing on darwin`,
+      );
+    }
+    for (const needle of ['brave-browser', 'vivaldi', 'helium', 'thorium']) {
+      assert.ok(
+        launch.candidateBrowsers('linux').some((p) => p.includes(needle)),
+        `${needle} missing on linux`,
+      );
+    }
+  });
+
+  await check('args: the CDP origin allowlist is passed', () => {
+    // Chromium 128+ rejects a DevTools client whose Origin it does not trust, and
+    // the failure surfaces as a bare handshake error.
+    assert.ok(launch.buildLaunchArgs({}).includes('--remote-allow-origins=*'));
+  });
+
   await check('detect: an unknown platform yields nothing', () => {
     assert.deepEqual(launch.candidateBrowsers('plan9'), []);
     assert.equal(launch.detectBrowserPath('plan9'), undefined);

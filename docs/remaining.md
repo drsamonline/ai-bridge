@@ -1,6 +1,6 @@
 # What is left
 
-**930 checks across 34 suites, all green** — verified locally and re-run by CI on
+**932 checks across 34 suites, all green** — verified locally and re-run by CI on
 every push. (Sum of each suite's own reported total; `compression-bench` writes a
 report instead of counting.)
 

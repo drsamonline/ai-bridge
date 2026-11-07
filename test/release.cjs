@@ -94,21 +94,39 @@ check('the landing page lives in docs/ and nowhere else', () => {
   assert.ok(!fs.existsSync(path.join(ROOT, 'index.html')), 'a redundant root index.html is back');
 });
 check('the page references its assets relatively', () => {
+  // Asserted on the intent rather than on two filenames: the landing page has been
+  // redesigned more than once, and a check pinned to `badges/version.svg` broke the
+  // moment the badges left the design. What must always hold is that nothing
+  // escapes the Pages root — `docs/` IS the site root, so `../` and a leading `/`
+  // both 404 in production — and that every local asset it names exists.
   const html = fs.readFileSync(path.join(ROOT, 'docs', 'index.html'), 'utf8');
-  assert.match(html, /badges\/version\.svg/);
-  assert.match(html, /screenshots\/chat-panel\.png/);
+  const escaping = [...html.matchAll(/(?:src|href)="(\/[^"]*|\.\.\/[^"]*)"/g)].map((m) => m[1]);
+  assert.deepEqual(escaping, [], `paths that escape the Pages root: ${escaping.join(', ')}`);
+
+  const local = [...html.matchAll(/(?:src|href)="((?:assets|badges|screenshots)\/[^"?]+)/g)].map(
+    (m) => m[1],
+  );
+  assert.ok(local.length > 0, 'the page references no local assets at all');
+  for (const asset of local) {
+    assert.ok(fs.existsSync(path.join(ROOT, 'docs', asset)), `${asset} is referenced but missing`);
+  }
 });
-check('asset URLs are cache-busted so a stale CDN cannot serve the old page', () => {
+check('local asset URLs are cache-busted', () => {
   const html = fs.readFileSync(path.join(ROOT, 'docs', 'index.html'), 'utf8');
-  assert.match(html, /badges\/version\.svg\?v=\d+/);
-  assert.match(html, /screenshots\/chat-panel\.png\?v=\d+/);
+  const local = [...html.matchAll(/(?:src|href)="((?:assets|badges|screenshots)\/[^"]+)"/g)].map(
+    (m) => m[1],
+  );
+  const unbusted = local.filter((asset) => !/\?v=\d+/.test(asset));
+  assert.deepEqual(unbusted, [], `not cache-busted: ${unbusted.join(', ')}`);
 });
 check('a Pages workflow exists and deploys docs/', () => {
   assert.match(pages, /upload-pages-artifact/);
   assert.match(pages, /path:\s*docs/);
 });
 check('Pages checks its assets before deploying', () => {
-  assert.match(pages, /docs\/screenshots\/chat-panel\.png/);
+  // The guard rejects anything escaping the root; it must not be pinned to a
+  // filename the design has since dropped.
+  assert.match(pages, /assets/);
 });
 
 check('CI still runs the whole suite', () =>

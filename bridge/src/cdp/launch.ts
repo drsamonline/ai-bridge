@@ -61,10 +61,22 @@ export function candidateBrowsers(
       env['PROGRAMFILES(X86)'],
       env['LOCALAPPDATA'],
     ].filter((root): root is string => Boolean(root));
+    // Chromium forks included on purpose: any of them answers the debugging
+    // protocol, and several are lighter than Chrome on RAM — which is the whole
+    // reason launch mode exists. Order is by how common the install is.
     const names = [
       'Google\\Chrome\\Application\\chrome.exe',
       'Microsoft\\Edge\\Application\\msedge.exe',
+      'BraveSoftware\\Brave-Browser\\Application\\brave.exe',
       'Chromium\\Application\\chrome.exe',
+      'Vivaldi\\Application\\vivaldi.exe',
+      // Helium and Thorium install per-user or per-machine; these are the paths
+      // they use in practice. A miss is not fatal — aiBridge.browser.exePath
+      // overrides the whole search.
+      'Programs\\Helium\\helium.exe',
+      'Helium\\helium.exe',
+      'Programs\\Thorium\\thorium.exe',
+      'Thorium\\thorium.exe',
     ];
     return roots.flatMap((root) => names.map((name) => path.join(root, name)));
   }
@@ -72,7 +84,12 @@ export function candidateBrowsers(
     return [
       '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
       '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+      '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
       '/Applications/Chromium.app/Contents/MacOS/Chromium',
+      '/Applications/Vivaldi.app/Contents/MacOS/Vivaldi',
+      // Helium's bundle id is net.imput.helium; the app name is Helium.
+      '/Applications/Helium.app/Contents/MacOS/Helium',
+      '/Applications/Thorium.app/Contents/MacOS/Thorium',
     ];
   }
   if (platform === 'linux') {
@@ -82,6 +99,10 @@ export function candidateBrowsers(
       '/usr/bin/chromium',
       '/usr/bin/chromium-browser',
       '/usr/bin/microsoft-edge',
+      '/usr/bin/brave-browser',
+      '/usr/bin/vivaldi',
+      '/usr/bin/helium',
+      '/usr/bin/thorium',
       '/snap/bin/chromium',
     ];
   }
@@ -116,6 +137,10 @@ export function buildLaunchArgs(options: LaunchOptions): string[] {
     '--disable-features=Translate',
     // Keeps the window from stealing focus on every VS Code start.
     '--disable-background-mode',
+    // Chromium 128+ rejects a DevTools client whose Origin it does not trust,
+    // which shows up as a bare handshake failure with no explanation. Every one
+    // of these browsers is Chromium, so the flag is always applicable.
+    '--remote-allow-origins=*',
   ];
   if (options.headless) args.push('--headless=new', '--disable-gpu');
   args.push(...(options.extraArgs ?? []));

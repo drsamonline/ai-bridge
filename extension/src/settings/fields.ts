@@ -106,7 +106,7 @@ export const FIELDS: FieldSpec[] = [
     type: 'string',
     default: '',
     tab: 'providers',
-    help: 'Chrome or Edge binary. Leave empty to auto-detect the usual install locations.',
+    help: 'Chrome, Edge, Brave, Vivaldi, Helium or Thorium. Leave empty to auto-detect the usual install locations on Windows, macOS and Linux.',
   },
   {
     key: 'aiBridge.browser.profileDir',

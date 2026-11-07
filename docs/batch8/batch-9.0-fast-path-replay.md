@@ -565,3 +565,24 @@ arguments, so a neighbouring call's flag cannot satisfy it.
 If the polling still feels heavy on Windows, `aiBridge.watchdog.pollMs` (default
 3000) raises the interval; each poll starts PowerShell, which costs a few hundred
 milliseconds on that platform.
+
+### 10.10 — Chromium forks, and the origin allowlist
+
+Launch mode only looked for Chrome, Edge and Chromium. Any Chromium fork answers
+the debugging protocol, and several are lighter than Chrome on RAM — which is the
+whole reason launch mode exists. Added: **Brave, Vivaldi, Helium and Thorium**, with
+the install paths each one actually uses on Windows, macOS and Linux.
+
+Helium is the interesting one: a privacy-focused Chromium fork, and the reason this
+came up. Two caveats, neither fatal here — it crashes when *two* CDP clients attach
+(this extension uses one), and like every Chromium since 128 it needs the origin
+allowlist.
+
+That second point is a real fix in its own right: `--remote-allow-origins=*` is now
+always passed. Without it, Chromium 128+ rejects a DevTools client whose Origin it
+does not trust, and the failure arrives as a bare handshake error with nothing
+explaining why.
+
+Auto-detection is best-effort for Helium and Thorium, whose install locations vary.
+A miss is not fatal — `aiBridge.browser.exePath` overrides the whole search, and the
+field's help now says so.
