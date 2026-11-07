@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Bridge Debate — five models argue, you get the plan</title>
+<meta name="description" content="A multi-participant planning engine: five AI web chats debate a plan to consensus over the Chrome DevTools Protocol, with a deterministic token protocol, versioned plan artifacts and an objections ledger. Pre-alpha.">
+<meta name="theme-color" content="#0a0b0f" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f7f5f0" media="(prefers-color-scheme: light)">
+<meta property="og:title" content="AI Bridge Debate — five models argue, you get the plan">
+<meta property="og:description" content="Planner, auditor and up to three debaters, driven over CDP, agreeing a versioned plan with an objections ledger you can check.">
+<meta property="og:image" content="architecture.svg">
+<link rel="icon" href="mark.svg" type="image/svg+xml">
+<style>
+  /* Warm paper and burnt amber, not the parent project's signal green. The
+     engine is a deliberation: paper, ink, a lamp. Dark is the app's own canvas. */
+  :root {
+    --paper: #f7f5f0; --paper-2: #efebe2; --card: #fffefb;
+    --ink: #17150f; --muted: #6d675c; --line: rgba(23,21,15,0.13);
+    --accent: #8f5a12; --accent-soft: rgba(143,90,18,0.10);
+    --mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
+    --sans: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+  }
+  :root[data-theme="dark"] {
+    --paper: #0a0b0f; --paper-2: #0e1016; --card: #12141b;
+    --ink: #ece7dd; --muted: #9a958a; --line: rgba(236,231,221,0.12);
+    --accent: #e0a03c; --accent-soft: rgba(224,160,60,0.12);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #0a0b0f; --paper-2: #0e1016; --card: #12141b;
+      --ink: #ece7dd; --muted: #9a958a; --line: rgba(236,231,221,0.12);
+      --accent: #e0a03c; --accent-soft: rgba(224,160,60,0.12);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font: 16px/1.62 var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 26px; }
+
+  header {
+    position: sticky; top: 0; z-index: 9;
+    background: color-mix(in srgb, var(--paper) 88%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  header .wrap { display: flex; align-items: center; gap: 12px; height: 58px; }
+  header .mark { width: 26px; height: 26px; flex: 0 0 auto; }
+  header .name { font-weight: 600; letter-spacing: -0.01em; }
+  header .name span { color: var(--muted); font-weight: 400; }
+  header nav { margin-left: auto; display: flex; align-items: center; gap: 18px; }
+  header nav a { color: var(--muted); font-size: 14px; }
+  header nav a:hover { color: var(--ink); }
+  #theme {
+    border: 1px solid var(--line); background: var(--card); color: var(--muted);
+    border-radius: 999px; padding: 5px 12px; font: 12.5px var(--sans); cursor: pointer;
+  }
+  #theme:hover { color: var(--ink); }
+  @media (max-width: 720px) { header nav a:not(#theme) { display: none; } }
+
+  .hero { padding: 74px 0 10px; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    font: 12px var(--mono); letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--accent); background: var(--accent-soft);
+    border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px;
+  }
+  .eyebrow i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  h1 {
+    font-size: clamp(34px, 5.4vw, 54px); line-height: 1.08; letter-spacing: -0.025em;
+    margin: 22px 0 0; max-width: 26ch; font-weight: 650;
+  }
+  h1 em { font-style: normal; color: var(--accent); }
+  .lede { font-size: 18.5px; color: var(--muted); max-width: 60ch; margin: 20px 0 0; }
+  .lede b { color: var(--ink); font-weight: 600; }
+
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; margin: 30px 0 0; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 9px;
+    border-radius: 7px; padding: 11px 18px; font-size: 14.5px; font-weight: 550;
+    border: 1px solid var(--line); background: var(--card); color: var(--ink);
+  }
+  .btn:hover { text-decoration: none; border-color: var(--accent); }
+  .btn.primary { background: var(--accent); color: #fff; border-color: transparent; }
+  .btn.primary:hover { filter: brightness(1.08); }
+
+  .badges { display: flex; flex-wrap: wrap; gap: 7px; margin: 34px 0 0; }
+  .badges img { height: 24px; display: block; }
+
+  section { padding: 58px 0; border-top: 1px solid var(--line); margin-top: 58px; }
+  h2 { font-size: 26px; letter-spacing: -0.02em; margin: 0 0 8px; font-weight: 650; }
+  h2 + .sub { color: var(--muted); margin: 0 0 30px; max-width: 62ch; }
+  h3 { font-size: 16px; margin: 0 0 6px; font-weight: 600; }
+
+  .note {
+    display: grid; grid-template-columns: 3px 1fr; gap: 18px;
+    background: var(--paper-2); border: 1px solid var(--line); border-radius: 9px;
+    padding: 20px 22px 20px 0; overflow: hidden;
+  }
+  .note::before { content: ""; background: var(--accent); border-radius: 3px; }
+  .note p { margin: 0; color: var(--muted); font-size: 15px; }
+  .note p + p { margin-top: 10px; }
+  .note b { color: var(--ink); }
+
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  @media (max-width: 760px) { .grid3 { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 9px;
+    padding: 22px;
+  }
+  .card p { margin: 0; color: var(--muted); font-size: 14.5px; }
+  .card .n {
+    font: 11px var(--mono); color: var(--accent); letter-spacing: 0.08em;
+    display: block; margin-bottom: 10px;
+  }
+
+  .roster { display: grid; gap: 10px; margin: 0 0 28px; }
+  .role {
+    display: grid; grid-template-columns: 26px 1fr auto; gap: 14px; align-items: baseline;
+    border: 1px solid var(--line); border-radius: 8px; padding: 13px 16px; background: var(--card);
+  }
+  .role .dot { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--accent); }
+  .role.planner .dot, .role.auditor .dot { background: var(--accent); }
+  .role b { font-weight: 600; }
+  .role em { font-style: normal; color: var(--muted); font-size: 14px; }
+  .role .tier { font: 11.5px var(--mono); color: var(--muted); }
+
+  pre {
+    background: var(--paper-2); border: 1px solid var(--line); border-radius: 9px;
+    padding: 18px 20px; overflow-x: auto; margin: 0;
+    font: 13px/1.75 var(--mono); color: var(--ink);
+  }
+  pre .c { color: var(--muted); }
+  pre .k { color: var(--accent); }
+  .tok { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 700px) { .tok { grid-template-columns: 1fr; } }
+  dl { margin: 0; }
+  dt { font: 12.5px var(--mono); color: var(--accent); margin-top: 14px; }
+  dt:first-child { margin-top: 0; }
+  dd { margin: 3px 0 0; color: var(--muted); font-size: 14px; }
+
+  figure { margin: 0; }
+  figure img {
+    width: 100%; height: auto; display: block;
+    border: 1px solid var(--line); border-radius: 9px; background: #0e1016;
+  }
+  figcaption { color: var(--muted); font-size: 13.5px; margin-top: 12px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+  th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  td:first-child { width: 34%; font-weight: 550; }
+  td { color: var(--muted); }
+  .ok { color: #2f6b46; font-weight: 600; }
+  .no { color: #9a5b12; font-weight: 600; }
+  :root[data-theme="dark"] .ok { color: #57b87c; }
+  :root[data-theme="dark"] .no { color: #e0a03c; }
+
+  .reuse { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; }
+  @media (max-width: 760px) { .reuse { grid-template-columns: 1fr; } }
+  .reuse ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 14.5px; }
+  .reuse li { margin-bottom: 8px; }
+  .reuse code, td code, dd code { font: 12.5px var(--mono); background: var(--paper-2); padding: 1px 5px; border-radius: 4px; color: var(--ink); }
+
+  .support { border-top: 1px solid var(--line); margin-top: 66px; padding: 38px 0 0; }
+  .support-in { display: grid; grid-template-columns: 92px 1fr; gap: 20px; }
+  .support-in img.portrait { width: 92px; height: 92px; border-radius: 5px; border: 1px solid var(--line); }
+  .support-in img.qr { width: 92px; height: 92px; margin-top: 10px; border-radius: 5px; border: 1px solid var(--line); background: #fff; }
+  .support p { margin: 0 0 12px; color: var(--muted); font-size: 14.5px; max-width: 62ch; }
+  .handles { display: flex; flex-wrap: wrap; gap: 8px; font-size: 13.5px; }
+  .handles span, .handles a {
+    border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px;
+    background: var(--card); color: var(--muted);
+  }
+  .handles a:hover { color: var(--ink); text-decoration: none; border-color: var(--accent); }
+
+  footer { border-top: 1px solid var(--line); margin-top: 40px; padding: 26px 0 46px; }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; font-size: 13.5px; color: var(--muted); }
+  footer .stamp { margin-left: auto; font: 11.5px var(--mono); }
+  @media (max-width: 640px) { .support-in { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <svg class="mark" viewBox="0 0 64 64" aria-hidden="true">
+      <circle cx="32" cy="32" r="22" fill="none" stroke="currentColor" stroke-opacity=".25" stroke-width="1.4"/>
+      <path d="M32 10 L52 25 L44.4 49 L19.6 49 L12 25 Z" fill="none" stroke="currentColor" stroke-opacity=".45" stroke-width="1.4"/>
+      <path d="M32 10 L44.4 49 M52 25 L19.6 49 M44.4 49 L12 25 M19.6 49 L32 10 M12 25 L52 25"
+            fill="none" stroke="currentColor" stroke-opacity=".16" stroke-width="1"/>
+      <circle cx="32" cy="10" r="3.6" fill="currentColor"/>
+      <circle cx="52" cy="25" r="2.8" fill="none" stroke="currentColor" stroke-width="1.6"/>
+      <circle cx="44.4" cy="49" r="2.8" fill="none" stroke="currentColor" stroke-width="1.6"/>
+      <circle cx="19.6" cy="49" r="2.8" fill="none" stroke="currentColor" stroke-width="1.6"/>
+      <circle cx="12" cy="25" r="2.8" fill="none" stroke="currentColor" stroke-width="1.6"/>
+      <rect x="29" y="28" width="6" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"/>
+      <path d="M30.6 30.6 H33.4 M30.6 33 H33.4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>
+    </svg>
+    <span class="name">AI Bridge <span>Debate</span></span>
+    <nav>
+      <a href="#how">How it runs</a>
+      <a href="#proven">Status</a>
+      <a href="#support">Support</a>
+      <a href="SPEC-v6.md">Spec</a>
+      <button id="theme" type="button" aria-live="polite">theme</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <div class="hero">
+    <span class="eyebrow"><i></i>pre-alpha · spec v6</span>
+    <h1>Five models argue.<br><em>You get the plan.</em></h1>
+    <p class="lede">A single model reviewing its own plan agrees with itself. This engine puts a
+      <b>planner</b>, an <b>auditor</b> and up to three <b>debaters</b> in five browser tabs you are already
+      signed in to, and runs them through a deterministic token protocol until they agree a
+      versioned plan — or until you decide for them.</p>
+
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/drsamonline/ai-bridge/tree/debate/step1-runtime-dir">Branch on GitHub</a>
+      <a class="btn" href="SPEC-v6.md">Read the spec</a>
+      <a class="btn" href="runtime-split-map.md">Implementation map</a>
+    </div>
+
+    <div class="badges">
+      <img src="badges/spec.svg" alt="spec v6">
+      <img src="badges/status.svg" alt="pre-alpha">
+      <img src="badges/build.svg" alt="step 1 of 7">
+      <img src="badges/checks.svg" alt="651 inherited checks">
+      <img src="badges/engine.svg" alt="engine: ai-bridge">
+      <img src="badges/node.svg" alt="Node 20 or newer">
+      <img src="badges/licence.svg" alt="PolyForm Noncommercial 1.0.0">
+    </div>
+  </div>
+
+  <section>
+    <div class="note">
+      <div>
+        <p><b>Nothing here runs a session yet.</b> The specification is agreed and the first
+        refactor has landed: <code>bridge/src/runtime.ts</code> became a module directory. The
+        scheduler, state machine, relay and session registry are specified and mapped to real
+        line numbers, not written.</p>
+        <p>What does work is the engine underneath — CDP attachment, five provider adapters,
+        response settling, repo reading — inherited from AI Bridge and green across 34 of 35
+        suites.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="why">
+    <h2>Why a debate, and not a better prompt</h2>
+    <p class="sub">Asking one model to check its own work is asking it to disagree with the thing
+      it just produced. Separating the roles, and making the disagreement a first-class artifact,
+      is the whole idea.</p>
+    <div class="grid3">
+      <div class="card">
+        <span class="n">01</span>
+        <h3>Separate the roles</h3>
+        <p>One participant proposes. A different participant, with the code in front of it, looks for
+          what the proposal gets wrong. They do not share a context window, so they cannot quietly
+          agree.</p>
+      </div>
+      <div class="card">
+        <span class="n">02</span>
+        <h3>Make the argument an artifact</h3>
+        <p>Every plan revision is a hashed file. Every objection carries a round index and a
+          resolution. The bundle you hand to a builder is the transcript, not a summary of one.</p>
+      </div>
+      <div class="card">
+        <span class="n">03</span>
+        <h3>Stop on a rule, not a vibe</h3>
+        <p>Consensus needs every active participant to say so in the same round. One dissenter ends
+          the session in your queue instead of being averaged away.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="how">
+    <h2>How a session runs</h2>
+    <p class="sub">Five participants, one per tab, leased for the session. A turn is one dispatch,
+      one settled response, one control token. The roster is fixed at session start and mutable
+      only between rounds.</p>
+
+    <div class="roster">
+      <div class="role planner">
+        <span class="dot"></span>
+        <span><b>Planner</b> — revises the plan. <em>Every turn must carry a fenced plan block.</em></span>
+        <span class="tier">required</span>
+      </div>
+      <div class="role auditor">
+        <span class="dot"></span>
+        <span><b>Auditor</b> — checks the plan against a frozen repo snapshot. <em>Only role that may raise an objection.</em></span>
+        <span class="tier">required · 2× slice</span>
+      </div>
+      <div class="role">
+        <span class="dot"></span>
+        <span><b>Debater ×3</b> — critique the plan's reasoning. <em>No snapshot: their job is the argument, not the code.</em></span>
+        <span class="tier">0–3</span>
+      </div>
+    </div>
+
+    <div class="tok">
+      <div>
+        <h3 style="margin-bottom:12px">Six tokens, one per message</h3>
+        <dl>
+          <dt>[[READY]]</dt><dd>Handshake and reattach only.</dd>
+          <dt>[[REPLY]]</dt><dd>An ordinary turn.</dd>
+          <dt>[[ASK_USER: q | opts | default]]</dt><dd>Halt and ask. Immediate.</dd>
+          <dt>[[ESCALATE: one sentence]]</dt><dd>Extends the round budget, capped at three a session.</dd>
+          <dt>[[OBJECTION: text | severity]]</dt><dd>Auditor only. Enters the ledger with its round index.</dd>
+          <dt>[[CONSENSUS]]</dt><dd>Counts only if every active participant emits it in the same round.</dd>
+        </dl>
+      </div>
+      <div>
+        <h3 style="margin-bottom:12px">The turn loop</h3>
+        <pre><span class="c">// last non-whitespace line, outside any fence</span>
+settle  →  sentinel or stop-gone
+       →  <span class="k">trust the token</span>
+       →  debounce
+       →  <span class="k">retry once</span>, then degrade
+       →  timeout
+       →  <span class="k">STREAM_TIMEOUT</span>
+
+round = 7 default
+turn  = 1 dispatch · 1 settle
+        · 1 token
+complete = last non-degraded,
+           non-blocked speaker</pre>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>The shape of it</h2>
+    <p class="sub">The bridge is the engine and the shell is a page it serves. Nothing important
+      lives in the browser.</p>
+    <figure>
+      <img src="architecture.svg" alt="Diagram: five participant tabs in Chrome, driven over CDP by a Node bridge containing scheduler, relay, state machine and session registry; a shell page on loopback; a frozen repo snapshot feeding each turn.">
+      <figcaption>Five tabs, one bridge, one frozen snapshot. A diagram, not a screenshot — there is
+        no interface yet to photograph.</figcaption>
+    </figure>
+  </section>
+
+  <section id="proven">
+    <h2>What is proven, and what is not</h2>
+    <p class="sub">The inherited engine is tested. Everything specific to the debate is specified,
+      reviewed across six drafts, and unbuilt. The distinction matters more than the roadmap.</p>
+    <table>
+      <thead><tr><th>Claim</th><th>State</th></tr></thead>
+      <tbody>
+        <tr><td>CDP attach, tab ownership, detach without killing the browser</td><td><span class="ok">Proven</span> — 39 checks</td></tr>
+        <tr><td>Response settling by copy-sentinel, stop-button, debounce</td><td><span class="ok">Proven</span> — fixtures only</td></tr>
+        <tr><td>Provider adapters against ChatGPT, Claude, Gemini</td><td><span class="no">Unverified</span> — fixtures, never live sites</td></tr>
+        <tr><td>Fastpath replay without typing</td><td><span class="no">Inert</span> — no provider template exists</td></tr>
+        <tr><td>Round scheduler, state machine, relay, session registry</td><td><span class="no">Specified</span> — mapped, not written</td></tr>
+        <tr><td>Repo snapshot ranker with per-file token accounting</td><td><span class="no">Specified</span> — today it is a yes/no gate</td></tr>
+        <tr><td>Served-shell nonce and Origin/Host validation</td><td><span class="no">Specified</span> — required before the shell ships</td></tr>
+        <tr><td>Two participants sharing one provider account</td><td><span class="no">Open</span> — the spec has no account dimension</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Built on AI Bridge</h2>
+    <p class="sub">This is not a rewrite. The hard part — driving a signed-in browser tab and
+      knowing when it has finished answering — already exists and is tested.</p>
+    <div class="reuse">
+      <div>
+        <h3>Reused as-is</h3>
+        <ul>
+          <li><code>cdp/controller.ts</code> — attach, owned tabs, recycle, GC</li>
+          <li><code>adapters/*</code> — five providers, one frozen contract</li>
+          <li><code>adapters/observer.ts</code> — the settle signal the token parse depends on</li>
+          <li><code>adapters/signin.ts</code> — login detection with no request cost</li>
+          <li><code>fastpath/*</code> — template replay, when a template exists</li>
+          <li><code>repo/reader.ts</code> — the snapshot provider</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Written for the debate</h3>
+        <ul>
+          <li><code>runtime/scheduler.ts</code> — who speaks, when a round ends</li>
+          <li><code>runtime/stateMachine.ts</code> — fourteen states, per-participant sub-states</li>
+          <li><code>runtime/relay.ts</code> — payload, dispatch, token parse</li>
+          <li><code>runtime/session.ts</code> — registry, leases, tiers, handoff</li>
+          <li><code>rotation/rotator.ts</code> — moved out of the retired extension tree</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="support" id="support">
+    <h2>Support the work</h2>
+    <div class="support-in">
+      <div>
+        <img class="portrait" src="../assets/support-portrait.jpg" alt="Dr Sohil Momin">
+        <img class="qr" src="../assets/upi-qr.svg" alt="UPI payment QR — open amount">
+      </div>
+      <div>
+        <h3 style="margin:0 0 6px">Free to use, and it stays free</h3>
+        <p>One person's work: no company, no ads, no tracking, no paid tier. If it saved you an
+        afternoon, a contribution keeps the next one coming — any amount, or none.</p>
+        <div class="handles">
+          <span>UPI · drsohilboi@ybl</span>
+          <a href="https://ko-fi.com/matneo" rel="noopener noreferrer">Ko-fi</a>
+          <a href="https://paypal.me/drsohilmomin?locale.x=en_GB&amp;country.x=IN" rel="noopener noreferrer">PayPal</a>
+          <a href="https://www.amazon.com/stores/author/B08ZT331LY/allbooks?ccs_id=aed72b9f-71d9-41dc-adee-e9368a317acc" rel="noopener noreferrer">Books</a>
+          <a href="https://drsamonline.github.io/" rel="noopener noreferrer">All projects</a>
+          <a href="mailto:sohilmomin2000@gmail.com">Email</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span><b>AI Bridge Debate</b> — built by <a href="https://drsamonline.github.io/">Dr Sohil Momin</a>.</span>
+    <a href="https://github.com/drsamonline/ai-bridge/tree/debate/step1-runtime-dir">GitHub</a>
+    <a href="SPEC-v6.md">Spec</a>
+    <a href="https://github.com/drsamonline/ai-bridge/blob/main/LICENSE">Licence</a>
+    <span class="stamp">design 2026-11-07</span>
+  </div>
+</footer>
+
+<script>
+(() => {
+  const root = document.documentElement;
+  const btn = document.getElementById('theme');
+  const KEY = 'debate-landing-theme';
+  const order = ['system', 'light', 'dark'];
+  let mode = localStorage.getItem(KEY) || 'system';
+
+  const paint = (m) => {
+    if (m === 'system') root.removeAttribute('data-theme');
+    else root.setAttribute('data-theme', m);
+    btn.textContent = m;
+    btn.setAttribute('aria-label', `Theme: ${m}. Click to change.`);
+  };
+  paint(mode);
+
+  btn.addEventListener('click', () => {
+    mode = order[(order.indexOf(mode) + 1) % order.length];
+    localStorage.setItem(KEY, mode);
+    paint(mode);
+  });
+})();
+</script>
+</body>
+</html>

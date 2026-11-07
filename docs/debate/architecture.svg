@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 400" width="900" height="400" role="img" aria-labelledby="t d">
+  <title id="t">Debate engine architecture</title>
+  <desc id="d">Five participant tabs in a Chrome the user is already signed in to, driven over the Chrome DevTools Protocol by a Node bridge that owns the scheduler, relay, state machine and session registry. A shell page talks to the bridge over loopback, and a frozen repo snapshot feeds every turn.</desc>
+  <style>
+    .bg   { fill: #0e1016; }
+    .panel{ fill: #14161d; stroke: #2a2f3a; stroke-width: 1.2; }
+    .pill { fill: #1a1d26; stroke: #333a47; stroke-width: 1; }
+    .mod  { fill: #191c24; stroke: #3a4150; stroke-width: 1; }
+    .t    { fill: #e8e4da; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 12px; }
+    .h    { fill: #e8e4da; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 13px; font-weight: 600; }
+    .m    { fill: #9a958a; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 11px; }
+    .a    { fill: #e0a03c; }
+    .ln   { stroke: #4a5262; stroke-width: 1.2; fill: none; }
+    .dash { stroke: #4a5262; stroke-width: 1.2; fill: none; stroke-dasharray: 4 3; }
+    .lbl  { fill: #8a8578; font-family: ui-monospace, Menlo, monospace; font-size: 10px; }
+  </style>
+
+  <rect class="bg" width="900" height="400" rx="8"/>
+
+  <!-- Chrome -->
+  <rect class="panel" x="24" y="54" width="300" height="212" rx="6"/>
+  <text class="h" x="40" y="76">Chrome — attach mode</text>
+  <text class="m" x="40" y="92">the profile you are already signed in to</text>
+
+  <rect class="pill" x="40" y="102" width="268" height="24" rx="4"/>
+  <text class="t" x="52" y="118">participant 0</text><text class="a" x="200" y="118">planner</text>
+
+  <rect class="pill" x="40" y="132" width="268" height="24" rx="4"/>
+  <text class="t" x="52" y="148">participant 1</text><text class="a" x="200" y="148">auditor</text>
+
+  <rect class="pill" x="40" y="162" width="268" height="24" rx="4"/>
+  <text class="t" x="52" y="178">participant 2</text><text class="m" x="200" y="178">debater</text>
+
+  <rect class="pill" x="40" y="192" width="268" height="24" rx="4"/>
+  <text class="t" x="52" y="208">participant 3</text><text class="m" x="200" y="208">debater</text>
+
+  <rect class="pill" x="40" y="222" width="268" height="24" rx="4"/>
+  <text class="t" x="52" y="238">participant 4</text><text class="m" x="200" y="238">debater</text>
+
+  <!-- CDP -->
+  <path class="ln" d="M330 159 L392 159" marker-end="url(#ar)"/>
+  <path class="ln" d="M392 171 L330 171" marker-end="url(#ar)"/>
+  <text class="lbl" x="338" y="150">CDP</text>
+
+  <!-- Bridge -->
+  <rect class="panel" x="400" y="54" width="290" height="212" rx="6"/>
+  <text class="h" x="416" y="76">Bridge — Node process</text>
+  <text class="m" x="416" y="92">owns all state; the shell is a UI</text>
+
+  <rect class="mod" x="416" y="102" width="122" height="34" rx="4"/>
+  <text class="t" x="426" y="123">scheduler</text>
+  <rect class="mod" x="552" y="102" width="122" height="34" rx="4"/>
+  <text class="t" x="562" y="123">relay</text>
+  <rect class="mod" x="416" y="144" width="122" height="34" rx="4"/>
+  <text class="t" x="426" y="165">stateMachine</text>
+  <rect class="mod" x="552" y="144" width="122" height="34" rx="4"/>
+  <text class="t" x="562" y="165">session</text>
+
+  <rect class="mod" x="416" y="190" width="258" height="30" rx="4"/>
+  <text class="m" x="426" y="209">adapters · observer · rotator · delta transport</text>
+
+  <rect class="mod" x="416" y="230" width="258" height="24" rx="4"/>
+  <text class="lbl" x="426" y="246">sessions/&lt;id&gt;/tx — sharded transcript</text>
+
+  <!-- Shell + handoff -->
+  <rect class="panel" x="742" y="54" width="146" height="62" rx="6"/>
+  <text class="m" x="754" y="74">shell page</text>
+  <text class="lbl" x="754" y="92">127.0.0.1:47615</text>
+  <text class="lbl" x="754" y="105">nonce · Origin check</text>
+  <path class="ln" d="M694 85 L738 85" marker-end="url(#ar)"/>
+  <text class="lbl" x="716" y="76" text-anchor="middle">HTTP/WS</text>
+
+  <rect class="panel" x="742" y="140" width="146" height="62" rx="6"/>
+  <text class="m" x="754" y="160">bundle</text>
+  <text class="lbl" x="754" y="178">plan · transcript</text>
+  <text class="lbl" x="754" y="191">objections → Sarvam</text>
+  <path class="ln" d="M694 171 L738 171" marker-end="url(#ar)"/>
+
+  <!-- Snapshot -->
+  <rect class="panel" x="400" y="300" width="290" height="52" rx="6"/>
+  <text class="m" x="416" y="321">repo snapshot — frozen at session start</text>
+  <text class="lbl" x="416" y="338">hashed · identical for all · never compressed</text>
+  <path class="dash" d="M545 270 L545 296" marker-end="url(#ar)"/>
+
+  <!-- caption -->
+  <text class="m" x="24" y="322">One participant per tab.</text>
+  <text class="m" x="24" y="340">A turn is one dispatch, one settled</text>
+  <text class="m" x="24" y="358">response, one control token.</text>
+
+  <defs>
+    <marker id="ar" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 0 L8 4 L0 8 z" fill="#4a5262"/>
+    </marker>
+  </defs>
+</svg>
