@@ -26,27 +26,34 @@ The batch-8 free-tier line is **complete**: eleven items landed across 0.21.0 �
 
 ## Open — needs your machine
 
-1. **A provider template.** The fast path is inert for ChatGPT / Claude / Gemini
-   until one exists. `AI Bridge: Capture Request as Template` now turns a copied
-   cURL into one; [`batch8/capture-a-template.md`](batch8/capture-a-template.md)
-   is the longer procedure. This is the single highest-value thing left.
-2. **Live selectors** for the three web chats — fixtures only so far.
-3. **Open VSX first publish** — the workflow is ready for trusted publishing, but
-   the extension does not exist on the registry yet, and the registry requires an
-   existing version before a trusted publisher can be registered. One publish with
-   a token, then delete the token.
-4. **Launch mode** — the browser launcher is tested for its arguments and its
-   failure paths, never against a real browser. Nothing has started one yet.
-4. **Editor surfaces** — Copilot rendering, the SCM commit button, the diff view,
+Ordered by what unblocks the most.
+
+1. **Install 0.47.0 and confirm the bridge starts.** Everything below depends on
+   this, and it has never worked on a real machine. Until 0.45.0 the `.vsix` did
+   not contain the bridge at all, so every install activated and died at the first
+   command; 0.46.0 stopped the console windows; 0.47.0 added Chromium forks.
+   `AI Bridge: Start Bridge` → the log must show `listening on …bridge.sock`.
+2. **One answered prompt.** `Ctrl+Alt+A`, type "hello". This is the first time the
+   product would have done its job outside a test harness.
+3. **Launch mode, end to end** — the launcher is tested for its arguments and its
+   failure paths, never against a real browser.
+4. **A provider template.** The fast path is inert for ChatGPT / Claude / Gemini
+   until one exists. `AI Bridge: Capture Request as Template` turns a copied cURL
+   into one; [`batch8/capture-a-template.md`](batch8/capture-a-template.md) is the
+   longer procedure.
+5. **Open VSX trusted publisher** — the extension is published (0.44.0 was the
+   first). What is left is registering the workflow at
+   `open-vsx.org/user-settings/trusted-publishers` and then **deleting
+   `OVSX_PAT`**; while the secret exists it takes precedence and the migration is
+   not real.
+6. **Live selectors** for the three web chats — fixtures only so far.
+7. **Editor surfaces** — Copilot rendering, the SCM commit button, the diff view,
    the report file write. Wired and smoke-tested; never seen in a real editor.
-4. **The 10-minute soak** (`npm run soak`) and the 1-hour cap hold.
-5. **Install the `.vsix`** — unsigned, not on the Marketplace.
-6. **Windows — unblocked in 9.5, still unverified.** The transport is now a local
-   socket and the session token is no longer written to disk, so the reason the
-   client refused to start on Windows is gone (NTFS could not express 0600 on a
-   file that held a credential). `test/handshake.cjs` still declares
-   `@platform linux`, because it asserts POSIX modes — that is the harness, not
-   the product. The Windows job runs every other browser-free suite.
+8. **The 10-minute soak** (`npm run soak`) and the 1-hour cap hold.
+9. **Windows** — unblocked in 9.5 (local socket, no token on disk), and the
+   console-window fix landed in 0.46.0. The CI job runs every browser-free suite;
+   `test/handshake.cjs` still declares `@platform linux` because it asserts POSIX
+   modes, which is the harness, not the product. No green run yet.
 
 ## Open — buildable, deliberately not done
 
