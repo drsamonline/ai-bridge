@@ -501,7 +501,7 @@ async function main() {
   /* ------------------------------------------------------- runtime wiring */
 
   const { base, server: toolServer } = await startToolServer();
-  const { BridgeRuntime } = require('../bridge/dist/runtime.js');
+  const { BridgeRuntime } = require('../bridge/dist/runtime/index.js');
   const { createLogger } = require('../bridge/dist/logger.js');
   const quiet = createLogger({ level: 'error', sink: () => {} });
 

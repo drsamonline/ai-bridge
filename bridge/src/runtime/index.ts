@@ -18,14 +18,14 @@ import type {
   PromptResult,
   RamLevel,
 } from '@ai-bridge/shared';
-import { CdpController } from './cdp/controller';
-import { candidateBrowsers, detectBrowserPath, launchBrowser } from './cdp/launch';
-import { detectLocalModels } from './api/local';
-import { DEFAULT_PORTS } from './cdp/discovery';
-import { RamMonitor } from './ram/monitor';
-import { Watchdog } from './watchdog';
-import { AdapterRegistry } from './adapters/registry';
-import { Router, type ProviderSpec } from './router/router';
+import { CdpController } from '../cdp/controller';
+import { candidateBrowsers, detectBrowserPath, launchBrowser } from '../cdp/launch';
+import { detectLocalModels } from '../api/local';
+import { DEFAULT_PORTS } from '../cdp/discovery';
+import { RamMonitor } from '../ram/monitor';
+import { Watchdog } from '../watchdog';
+import { AdapterRegistry } from '../adapters/registry';
+import { Router, type ProviderSpec } from '../router/router';
 import {
   ApiRegistry,
   AuthExpiredError,
@@ -33,12 +33,12 @@ import {
   isAbortError,
   type ApiMessage,
   type FetchLike,
-} from './api';
+} from '../api';
 import {
   assembleNative,
   buildToolsSystemPrompt,
   type ResponseSink,
-} from './protocol';
+} from '../protocol';
 import {
   ChallengeError,
   RungPolicy,
@@ -48,12 +48,12 @@ import {
   validateTemplate,
   type FastPathTemplate,
   type Rung,
-} from './fastpath';
-import { composeBoot, deltaLineCount } from './bootTransport';
+} from '../fastpath';
+import { composeBoot, deltaLineCount } from '../bootTransport';
 import { DOM_SHAPE_SNIPPET } from '@ai-bridge/shared';
-import { isStreamingAdapter } from './adapters/types';
-import { looksLikeSignIn, signInError } from './adapters/signin';
-import type { Logger } from './logger';
+import { isStreamingAdapter } from '../adapters/types';
+import { looksLikeSignIn, signInError } from '../adapters/signin';
+import type { Logger } from '../logger';
 
 export interface SwitchRecord {
   from: string;
@@ -770,7 +770,7 @@ export class BridgeRuntime {
         return { adapters: this.adapterList() };
       case 'ctl.providers.set': {
         // §1: "any logged-in web chat AI" — providers from configuration.
-        const { validateCustomProvider } = await import('./adapters/custom');
+        const { validateCustomProvider } = await import('../adapters/custom');
         const accepted: string[] = [];
         const rejected: Array<{ id: string; error: string }> = [];
         const valid: unknown[] = [];
