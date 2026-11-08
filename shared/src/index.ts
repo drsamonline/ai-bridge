@@ -8,3 +8,5 @@ export * from './client';
 export * from './repo/ports';
 export * from './repo/reader';
 export * from './repo/relevance';
+
+export * from './rotation/rotator';

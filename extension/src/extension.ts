@@ -50,7 +50,7 @@ import { bootstrapChat } from './state/bootstrap';
 import { CompressHost } from './compress/host';
 import { compressT0, savedPercent, type CompressResult } from './compress/t0';
 import { SettingsPanel } from './settings/panel';
-import { SessionRotator, type RotationResult } from './rotation/rotator';
+import { SessionRotator, type RotationResult } from '@ai-bridge/shared';
 import { effective, resolveLowEnd, type EffectiveSettings, type LowEndDecision } from './lowEnd';
 import { assertNoChatContent, buildReport, summarise } from './diagnostics/breakage';
 import type { PanelSnapshot } from './settings/controller';

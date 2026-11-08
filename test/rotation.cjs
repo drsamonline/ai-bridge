@@ -22,7 +22,7 @@ const path = require('node:path');
 
 const ROOT = path.resolve(__dirname, '..');
 const shared = require('../shared/dist/index.js');
-const { SessionRotator } = require('../extension/dist/rotation/rotator.js');
+const { SessionRotator } = require('../shared/dist/rotation/rotator.js');
 const { buildBoot, verifyAck } = require('../extension/dist/state/boot.js');
 const schema = require('../extension/dist/state/schema.js');
 

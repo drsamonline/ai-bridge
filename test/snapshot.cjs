@@ -18,6 +18,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 const { NodeFsPort, gitMeta } = require('../bridge/dist/repo/nodeFsPort.js');
+const { captureSnapshot, sliceForPlan } = require('../bridge/dist/repo/snapshot.js');
 const { rankSlice, sliceForRole, ROLE_SLICE_BYTES } = require('../bridge/dist/repo/slice.js');
 const { RepoReader, contextWorthIt } = require('../shared/dist/index.js');
 
@@ -340,6 +341,36 @@ function bundleOf(root, files) {
     assert.equal(slice.attach, true);
     assert.equal(slice.files[0].path, 'src/reader.ts', 'the file the plan names must rank first');
     assert.ok(slice.bytes <= ROLE_SLICE_BYTES.planner);
+  });
+
+  /* ------------------------------------------------- the missing glue (3.1) */
+
+  await checkAsync('snapshot: capture freezes the tree and names it', async () => {
+    const root = fixtureRepo();
+    const snap = await captureSnapshot(root);
+    assert.ok(snap.meta.id.startsWith('snap-'));
+    assert.equal(snap.meta.sha256.length, 64);
+    assert.equal(snap.meta.files, 4, 'the four editable files, not node_modules or the png');
+    assert.equal(snap.meta.commit, null, 'a directory that is not a repo still snapshots');
+    assert.deepEqual(snap.meta.skipped, []);
+  });
+
+  await checkAsync('snapshot: the planner and auditor get code, the debater gets none', async () => {
+    const root = fixtureRepo();
+    const snap = await captureSnapshot(root);
+    const plan = 'The RepoReader class in src/reader.ts must expose index() — the api surface needs it.';
+
+    const planner = await sliceForPlan(snap, plan, 'planner');
+    assert.equal(planner.contentAvailable, true, 'the slice must carry code, not just paths');
+    assert.ok(planner.bytes > 0 && planner.bytes <= ROLE_SLICE_BYTES.planner);
+    assert.ok(planner.text.includes('RepoReader'), 'the body of the named file must be in the text');
+
+    const auditor = await sliceForPlan(snap, plan, 'auditor');
+    assert.equal(auditor.contentAvailable, true);
+
+    const debater = await sliceForPlan(snap, plan, 'debater');
+    assert.deepEqual(debater.files, [], 'a debater debates the argument, not the code');
+    assert.equal(debater.bytes, 0);
   });
 
   for (const root of roots) {

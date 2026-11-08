@@ -52,6 +52,15 @@ export interface DispatchResult {
 /** The seam. A real implementation wraps Relay; a test passes a function. */
 export type Dispatch = (req: DispatchRequest) => Promise<DispatchResult>;
 
+/**
+ * Where a turn's code context comes from. `repo/snapshot.ts` supplies the real
+ * one; a test supplies a stub. Without this, `snapshotText` was always empty and
+ * the auditor audited a plan with no code in front of it.
+ */
+export interface SnapshotProvider {
+  sliceFor(planText: string, role: Role): Promise<string>;
+}
+
 export type RunnerEvent =
   | { type: 'turn.start'; round: number; participant: number; retry: boolean }
   | { type: 'turn.end'; round: number; participant: number; token: string | null; ms: number }
@@ -80,6 +89,7 @@ export interface RunnerDeps {
   root: string;
   record: SessionRecord;
   dispatch: Dispatch;
+  snapshot?: SnapshotProvider;
   roundBudget?: number;
   /** Hard stop on the loop, so a scheduler bug cannot spin forever. */
   maxTurns?: number;
@@ -202,14 +212,21 @@ export class SessionRunner {
   /* ------------------------------------------------------------------ turns */
 
   private async playTurn(participant: ParticipantSpec, round: number): Promise<Token | null> {
+    const planText = this.currentPlan();
+    // The slice is built once per turn: the plan is what it ranks against, and the
+    // plan does not change inside a turn.
+    const snapshotText = this.deps.snapshot
+      ? await this.deps.snapshot.sliceFor(planText, participant.role)
+      : '';
+
     const base: Omit<DispatchRequest, 'retry'> = {
       sessionId: this.deps.record.id,
       participant,
       round,
-      planText: this.currentPlan(),
+      planText,
       contextText: this.contextBlock(participant.index),
-      questionsText: '',
-      snapshotText: '',
+      questionsText: this.questions.open().map((q) => `- ${q.text}`).join('\n'),
+      snapshotText,
     };
 
     for (let attempt = 0; attempt < 2; attempt += 1) {

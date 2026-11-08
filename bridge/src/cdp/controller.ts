@@ -48,6 +48,8 @@ export class CdpController extends EventEmitter {
   private tabSeq = 0;
   private activeTabId: string | null = null;
   private recycled = 0;
+  /** Tabs a session has leased; never evicted, never recycled away. */
+  private readonly pinned = new Set<string>();
   private lastRecycleReason: string | null = null;
   private attachedAt = 0;
   private detaching = false;
@@ -219,9 +221,29 @@ export class CdpController extends EventEmitter {
    * Evict tabs that have seen no activity for `idleMs`, oldest first, while
    * keeping at least one tab alive. Returns the ids closed.
    */
+  /**
+   * Pin a tab to a session. A leased participant must not be evicted while it
+   * waits its turn — §4 says closeIdleTabs skips leased tabs, and until now
+   * nothing could tell it which those were.
+   */
+  pinTab(tabId: string): boolean {
+    if (!this.tabs.has(tabId)) return false;
+    this.pinned.add(tabId);
+    return true;
+  }
+
+  unpinTab(tabId: string): void {
+    this.pinned.delete(tabId);
+  }
+
+  pinnedTabs(): string[] {
+    return [...this.pinned].sort();
+  }
+
   async closeIdleTabs(): Promise<string[]> {
     const now = Date.now();
     const idle = [...this.tabs.values()]
+      .filter((t) => !this.pinned.has(t.id))
       .filter((t) => now - t.lastActivityAt >= this.idleMs)
       .sort((a, b) => a.lastActivityAt - b.lastActivityAt);
     const keep = this.tabs.size - idle.length >= 1 ? idle.length : Math.max(0, idle.length - 1);
@@ -241,6 +263,12 @@ export class CdpController extends EventEmitter {
    */
   async recycle(reason: string): Promise<{ closed: string | null; opened: TabInfo | null }> {
     if (!this.attached) return { closed: null, opened: null };
+    if (this.activeTabId && this.pinned.has(this.activeTabId)) {
+      // A leased tab is the session's; recycling it would strand a participant
+      // mid-debate. The caller gets a null and decides what to do.
+      this.opts.log.warn('recycle skipped: the active tab is pinned', { reason });
+      return { closed: null, opened: null };
+    }
     const closed = await this.closeTab(this.activeTabId ?? undefined);
     const opened = await this.newTab('about:blank');
     this.recycled += 1;

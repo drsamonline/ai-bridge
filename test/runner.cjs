@@ -395,6 +395,34 @@ function newSession(root, over = {}) {
       'large turns must be dropped, and the drop reported');
   });
 
+  await checkAsync('runner: the snapshot slice reaches the dispatch request', async () => {
+    const root = tempRoot();
+    const record = newSession(root, { roundBudget: 1 });
+    const seen = [];
+    const runner = new SessionRunner({
+      root,
+      record,
+      dispatch: async (req) => {
+        seen.push({ role: req.participant.role, snapshot: req.snapshotText });
+        return {
+          settledBy: 'sentinel',
+          text: req.participant.role === 'planner' ? plannerTurn('# p') : 'ok\n[[REPLY]]',
+        };
+      },
+      snapshot: {
+        sliceFor: async (planText, role) => (role === 'debater' ? '' : `### code for ${role}`),
+      },
+    });
+    await runner.run();
+
+    const planner = seen.find((s) => s.role === 'planner');
+    const auditor = seen.find((s) => s.role === 'auditor');
+    const debater = seen.find((s) => s.role === 'debater');
+    assert.equal(planner.snapshot, '### code for planner');
+    assert.equal(auditor.snapshot, '### code for auditor');
+    assert.equal(debater.snapshot, '', 'a debater is sent no slice');
+  });
+
   /* ------------------------------------------------------- batch 2: the states */
 
   await checkAsync('questions: an open question turns an agreement into a question', async () => {
