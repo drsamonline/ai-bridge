@@ -191,10 +191,17 @@ function bundleOf(root, files) {
 
   check('slice: the budget is a hard cap and over-budget files are reported', () => {
     const files = [];
-    for (let i = 0; i < 10; i += 1) files.push({ path: `src/f${i}.ts`, bytes: 2000 });
+    const bodies = {};
+    for (let i = 0; i < 10; i += 1) {
+      files.push({ path: `src/f${i}.ts`, bytes: 2000 });
+      // Real bodies, because the budget is charged on what is included rather
+      // than on the file's size on disk.
+      bodies[`src/f${i}.ts`] = 'x'.repeat(2000);
+    }
     const slice = rankSlice(bundleOf('/r', files), {
       planText: 'Update src/f3.ts and src/f4.ts — the api surface changed.',
       budgetBytes: 5000,
+      bodies,
     });
     assert.ok(slice.bytes <= 5000, `slice is ${slice.bytes} bytes against a 5000 cap`);
     assert.ok(slice.files.length >= 1);
@@ -237,6 +244,7 @@ function bundleOf(root, files) {
     const slice = rankSlice(bundle, {
       planText: 'Change src/ports.ts — the api surface needs a new method.',
       budgetBytes: 1000,
+      bodies: { 'src/ports.ts': 'y'.repeat(400), 'src/other.ts': 'z'.repeat(5000) },
     });
     assert.ok(slice.rationale.included.includes('src/ports.ts'));
     assert.ok(slice.rationale.excluded.includes('src/other.ts'));
@@ -251,6 +259,34 @@ function bundleOf(root, files) {
     assert.equal(debater.bytes, 0);
     const auditor = sliceForRole(bundle, 'Change src/ports.ts — the api surface moved.', 'auditor');
     assert.equal(auditor.files.length, 1);
+  });
+
+  check('slice: the slice actually carries code, not just a file list', () => {
+    const bundle = bundleOf('/r', [{ path: 'src/ports.ts', bytes: 400 }]);
+    const body = 'export interface FsPort {\n  list(): Promise<string[]>;\n}\n';
+    const slice = rankSlice(bundle, {
+      planText: 'Change src/ports.ts — the FsPort interface needs a new method.',
+      budgetBytes: 15 * 1024,
+      bodies: { 'src/ports.ts': body },
+    });
+    assert.equal(slice.contentAvailable, true);
+    assert.ok(slice.text.includes('list(): Promise<string[]>'),
+      'the injected text must contain the code, not only the path');
+    assert.ok(slice.text.includes('### src/ports.ts'));
+    // and the budget is charged on what is included, not on the file's size on disk
+    assert.equal(slice.bytes, Buffer.byteLength('### src/ports.ts\n') + Buffer.byteLength(body) + 1);
+  });
+
+  check('slice: without a body the signatures stand in, and say so', () => {
+    const bundle = bundleOf('/r', [
+      { path: 'src/a.ts', bytes: 900, signatures: ['export function rankSlice()'] },
+    ]);
+    const slice = rankSlice(bundle, {
+      planText: 'The rankSlice() function in src/a.ts needs the budget applied.',
+      budgetBytes: 15 * 1024,
+    });
+    assert.equal(slice.contentAvailable, true, 'signatures are content');
+    assert.ok(slice.text.includes('rankSlice()'));
   });
 
   check('slice: an empty bundle is not an error', () => {

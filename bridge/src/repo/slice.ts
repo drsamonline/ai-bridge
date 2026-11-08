@@ -27,6 +27,16 @@ export interface SliceOptions {
   budgetBytes: number;
   /** Belt and braces: even a small-file repo should not produce a thousand files. */
   maxFiles?: number;
+  /**
+   * File contents by path. Without them a slice is a table of contents, which is
+   * what an earlier version shipped: the ranker ranked files and then emitted
+   * only their headers, so the auditor was asked to check a plan against code it
+   * was never shown. `RepoReader.bodies(paths)` supplies these.
+   *
+   * Absent, the ranker falls back to the signatures the bundle already carries,
+   * and reports `contentAvailable: false` if even those are missing.
+   */
+  bodies?: Record<string, string>;
 }
 
 export interface SliceFile {
@@ -48,8 +58,13 @@ export interface Slice {
   omitted: SliceFile[];
   bytes: number;
   tokens: number;
-  /** The text to inject, with a path header per file. */
+  /** The text to inject: a path header and the file's content, per file. */
   text: string;
+  /**
+   * False when no body and no signatures were available, i.e. the text is only
+   * headers. A caller must not present such a slice as code context.
+   */
+  contentAvailable: boolean;
   rationale: {
     /** What the ranking was given, so a surprising slice can be explained. */
     scoringInput: string;
@@ -58,7 +73,6 @@ export interface Slice {
   };
 }
 
-const HEADER_BYTES = 48; // "### <path> (N bytes)\n" — counted, not guessed
 const DEFAULT_MAX_FILES = 40;
 
 /** Identifiers a plan is likely to name: snake_case, camelCase, CONSTANTS, calls. */
@@ -86,6 +100,7 @@ export function rankSlice(bundle: RepoBundle, opts: SliceOptions): Slice {
     bytes: 0,
     tokens: 0,
     text: '',
+    contentAvailable: false,
     rationale: { scoringInput: opts.planText.slice(0, 200), included: [], excluded: [] },
   });
 
@@ -144,16 +159,37 @@ export function rankSlice(bundle: RepoBundle, opts: SliceOptions): Slice {
   scored.sort((a, b) => (b.score - a.score) || a.path.localeCompare(b.path));
 
   const maxFiles = opts.maxFiles ?? DEFAULT_MAX_FILES;
+  const bodies = opts.bodies ?? {};
+  const byPath = new Map(bundle.files.map((f) => [f.path, f]));
+
+  /**
+   * What a file contributes to the slice. A body when the caller supplied one,
+   * otherwise the signatures the bundle already extracted, otherwise nothing —
+   * and nothing is recorded rather than silently counted as content.
+   */
+  const contentFor = (file: SliceFile): string => {
+    const body = bodies[file.path];
+    if (body !== undefined) return body;
+    return (byPath.get(file.path)?.signatures ?? []).join('\n');
+  };
+
   const included: SliceFile[] = [];
   const omitted: SliceFile[] = [];
+  const parts: string[] = [];
   let bytes = 0;
+  let contentAvailable = false;
 
   for (const file of scored) {
     if (included.length >= maxFiles) {
       omitted.push(file);
       continue;
     }
-    const cost = file.bytes + HEADER_BYTES;
+    // Charge what is actually included. `file.bytes` is the file's size on disk,
+    // which is the wrong number for a signatures-only file and was overstating
+    // both the budget and the header.
+    const header = `### ${file.path}\n`;
+    const content = contentFor(file);
+    const cost = Buffer.byteLength(header) + Buffer.byteLength(content) + 1;
     if (bytes + cost > opts.budgetBytes) {
       // Over budget. Keep looking: a later, smaller file may still fit, and
       // dropping everything after the first overflow throws away usable context.
@@ -161,12 +197,12 @@ export function rankSlice(bundle: RepoBundle, opts: SliceOptions): Slice {
       continue;
     }
     included.push(file);
+    parts.push(`${header}${content}\n`);
     bytes += cost;
+    if (content.length > 0) contentAvailable = true;
   }
 
-  const text = included
-    .map((f) => `### ${f.path} (${f.bytes} bytes)\n`)
-    .join('');
+  const text = parts.join('');
 
   return {
     attach: included.length > 0,
@@ -176,6 +212,7 @@ export function rankSlice(bundle: RepoBundle, opts: SliceOptions): Slice {
     bytes,
     tokens: included.reduce((n, f) => n + f.tokens, 0),
     text,
+    contentAvailable,
     rationale: {
       scoringInput: opts.planText.slice(0, 200),
       included: included.map((f) => f.path),
@@ -208,6 +245,7 @@ export function sliceForRole(bundle: RepoBundle, planText: string, role: SliceRo
       bytes: 0,
       tokens: 0,
       text: '',
+      contentAvailable: false,
       rationale: { scoringInput: planText.slice(0, 200), included: [], excluded: [] },
     };
   }
