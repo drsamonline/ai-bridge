@@ -18,10 +18,22 @@ what the green suite does not assert.
 **Blocked for any session that needs a repo snapshot or a handoff.** Not blocked
 for the turn loop itself, which is sound.
 
-The engine can play a debate and stop on a rule. It cannot yet deliver the two
+The engine can play a debate and stop on a rule. It could not deliver the two
 things the product is *for*: a slice of code for the auditor to check the plan
-against, and a bundle for the builder at the end. Both are specified, both have
-state-machine support, and neither is wired.
+against, and a bundle for the builder at the end.
+
+**Remediated since — `e7369d7` and `8e26daa`.** Findings 1–6 are closed: the
+slice carries code, sub-states are persisted, the bundle exists with a manifest,
+`finish()` resolves the planner by role, a refused transition is raised rather
+than dropped, and the turn ceiling halts. Four user gates gained callers
+(`resume`, `confirmConsensus`, `confirmBundle`, `confirmHandoff`), which closes
+finding 8 and the last of finding 7 that the runner can reach without a browser.
+
+**Still open: 7 (partially), 9–15.** The runner raises 14 of the machine's 35
+events; `STALLED`, `WALL_CLOCK`, `AWAITING_LOGIN` and `ABORTED` remain
+unreachable, and the snapshot accounting, regex, oversized-file and context-block
+findings are unchanged. None of those blocks a session; the two readiness gates
+still do.
 
 ---
 
