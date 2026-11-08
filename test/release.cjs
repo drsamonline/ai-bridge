@@ -199,6 +199,44 @@ check('an unknown bump is refused', () => {
   }
   assert.strictEqual(failed, true);
 });
+/* ------------------------------------------------------- the second release line */
+
+check('the engine has its own version, independent of the extension', () => {
+  const engine = JSON.parse(fs.readFileSync(path.join(ROOT, 'packages', 'debate', 'package.json'), 'utf8'));
+  const extension = JSON.parse(fs.readFileSync(path.join(ROOT, 'extension', 'package.json'), 'utf8'));
+  assert.strictEqual(engine.name, '@ai-bridge/debate');
+  assert.match(engine.version, /^\d+\.\d+\.\d+$/, 'the engine version must be semver');
+  // Independent means independent: the engine is pre-alpha and the extension is
+  // shipped, so they must not be forced to move together.
+  assert.ok(engine.version !== extension.version || engine.version === extension.version);
+  assert.strictEqual(engine.private, true, 'the engine is not published to npm');
+});
+
+check('the engine is not a workspace member', () => {
+  const root = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+  assert.ok(!(root.workspaces || []).includes('packages/debate'),
+    'npm would resolve a package whose source lives elsewhere');
+});
+
+check('the engine release is its own workflow, on its own tag prefix', () => {
+  const wf = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'debate-release.yml'), 'utf8');
+  assert.match(wf, /tags: \['debate-v\*'\]/, 'the engine must not share the v* tag namespace');
+  assert.match(wf, /make_latest: false/,
+    'the engine release must never be latest — the extension is what people install by name');
+  assert.match(wf, /packages\/debate\/package\.json/);
+
+  // and the extension's own workflow must be untouched by it
+  const main = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'release.yml'), 'utf8');
+  assert.ok(!main.includes('debate-v'), 'the two release lines must not share a trigger');
+});
+
+check('the engine release runs the engine suites, not the whole chain', () => {
+  const wf = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'debate-release.yml'), 'utf8');
+  for (const suite of ['statemachine', 'session', 'scheduler', 'snapshot', 'runner', 'sessions', 'payload', 'server-guard']) {
+    assert.ok(wf.includes(suite), `the engine release does not run ${suite}`);
+  }
+});
+
 check('the two manifests agree in the repo right now', () => {
   const a = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
   const b = JSON.parse(fs.readFileSync(path.join(ROOT, 'extension', 'package.json'), 'utf8')).version;

@@ -1,0 +1,19 @@
+{
+  "name": "@ai-bridge/debate",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Five AI web chats argue a plan to consensus, over CDP, with a versioned plan artifact and a handoff bundle.",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "homepage": "https://drsamonline.github.io/ai-bridge/debate/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/drsamonline/ai-bridge.git",
+    "directory": "bridge/src"
+  },
+  "files": [
+    "dist/runtime",
+    "dist/repo",
+    "dist/server",
+    "docs"
+  ]
+}

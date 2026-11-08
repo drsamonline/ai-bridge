@@ -70,6 +70,38 @@ either owned outright or generated.
 
 ---
 
+## Two release lines
+
+The two workstreams release separately, and the separation is by workflow and tag
+namespace rather than by repository.
+
+| | Extension (A) | Engine (B) |
+|---|---|---|
+| version lives in | `package.json` + `extension/package.json` (must agree) | `packages/debate/package.json` |
+| tag | `v0.48.0` | `debate-v0.1.0` |
+| workflow | `release.yml` | `debate-release.yml` |
+| artefact | `ai-bridge-<ver>.vsix` | `ai-bridge-debate-<ver>.tar.gz` |
+| runs | the whole suite | the eight engine suites only |
+| `latest` | yes | **never** — the extension is what people install by name |
+
+Three rules keep them apart:
+
+1. **The engine is never a workspace member.** `packages/debate` holds a version
+   and a packaging manifest, not source. Adding it to `workspaces` would make
+   `npm ci` resolve a package whose source lives in `bridge/src`.
+2. **The engine's release is never `latest`.** Stealing the badge would point the
+   extension's own install instructions at a tarball.
+3. **A broken engine release cannot block an extension release.** Separate
+   workflows, separate triggers, separate suite lists — which is the whole reason
+   this is two files rather than two jobs.
+
+`test/release.cjs` asserts all three, plus that the engine's version is semver and
+that neither workflow shares the other's trigger.
+
+When the engine stops needing the bridge's CDP connection, adapters and observer,
+`packages/debate` becomes a real workspace member: the source moves under
+`packages/debate/src/`, and the release flow above does not change.
+
 ## State as of the consolidation
 
 - `fix/landing-shots-and-guard` — **subsumed.** Its workflow assertion and gallery

@@ -1,0 +1,138 @@
+name: Debate release
+
+# The debate engine's own release line.
+#
+# Deliberately a separate workflow from release.yml rather than another job in it.
+# The extension's release is gated on a version bump in two manifests that must
+# agree; the engine's is gated on its own manifest and its own tag prefix. Two
+# workflows mean a broken engine release cannot block an extension release, and a
+# change to one trigger cannot silently change the other.
+#
+# The one rule that matters: this release is never `latest`. The extension is the
+# product people install by name; the engine is a pre-alpha companion. Stealing
+# the latest badge would make the extension's install instructions point at a
+# tarball.
+
+on:
+  push:
+    tags: ['debate-v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: debate-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    name: Read the engine version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      tag: ${{ steps.read.outputs.tag }}
+      exists: ${{ steps.read.outputs.exists }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read packages/debate/package.json
+        id: read
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "require('./packages/debate/package.json').version")
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::packages/debate/package.json version '$VERSION' is not semver"
+            exit 1
+          fi
+          TAG="debate-v$VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Tag $TAG already exists — nothing to release."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "New engine version $VERSION — releasing."
+          fi
+
+  verify:
+    name: Build and run the engine suites
+    needs: version
+    if: needs.version.outputs.exists == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+
+      # The eight suites that belong to the engine, named individually rather than
+      # taken from test:all — a broken extension suite must not block an engine
+      # release, and this list is the engine's own contract.
+      - name: Engine suites
+        run: |
+          set -euo pipefail
+          for suite in statemachine session scheduler snapshot runner sessions payload server-guard; do
+            echo "::group::$suite"
+            node "test/$suite.cjs"
+            echo "::endgroup::"
+          done
+
+  package:
+    name: Package the engine
+    needs: [version, verify]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+
+      - name: Assemble the tarball
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.version.outputs.version }}"
+          STAGE="ai-bridge-debate-$VERSION"
+          mkdir -p "$STAGE/dist" "$STAGE/docs"
+          # Only the engine's own modules. The rest of the bridge is the extension's.
+          cp -R bridge/dist/runtime "$STAGE/dist/runtime"
+          cp -R bridge/dist/repo "$STAGE/dist/repo"
+          cp -R bridge/dist/server "$STAGE/dist/server"
+          cp -R docs/debate "$STAGE/docs/debate"
+          cp packages/debate/package.json "$STAGE/package.json"
+          cp packages/debate/README.md "$STAGE/README.md"
+          tar -czf "$STAGE.tar.gz" "$STAGE"
+          ls -la "$STAGE.tar.gz"
+
+      - name: Publish the engine release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.version.outputs.tag }}
+          name: Debate engine ${{ needs.version.outputs.version }}
+          # Never latest: the extension is the thing installed by name.
+          make_latest: false
+          files: ai-bridge-debate-${{ needs.version.outputs.version }}.tar.gz
+          fail_on_unmatched_files: true
+          body: |
+            Debate engine **${{ needs.version.outputs.version }}** from `${{ github.sha }}`.
+
+            Pre-alpha. The turn loop, the state machine, the scheduler, the session
+            registry, the bundle and the served-shell guard are implemented and
+            tested. No session has been played against a live chat UI — see
+            `docs/debate/LIVE-GATE.md` inside the tarball for what that requires.
+
+            ```bash
+            tar -xzf ai-bridge-debate-${{ needs.version.outputs.version }}.tar.gz
+            ```
+
+            The specification, the audit and the eight resolved decisions are in
+            `docs/debate/`.
