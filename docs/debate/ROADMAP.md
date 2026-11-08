@@ -57,6 +57,11 @@ belongs to batch 5 or it will be written twice.
 
 ## Batch 3 — wire what already exists
 
+**Mostly done — `1eb0931`.** 3.1, 3.2 and 3.3 landed. **3.4 moved to batch 5:**
+`ctl.session.*` needs a `PROTOCOL_VERSION` bump against a file marked frozen, and
+every useful op on it needs a `Dispatch`, which does not exist until 5.3. Doing
+the protocol change before the seam it exposes would mean doing it twice.
+
 Everything here is built and tested; none of it is connected. This is the batch
 that makes the engine usable from outside without touching a browser.
 
