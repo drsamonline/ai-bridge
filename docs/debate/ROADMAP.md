@@ -113,6 +113,25 @@ payload is where the slice and the context block actually reach a participant.
 
 ---
 
+## Batches 6-11 — what is left, easy first
+
+The browser-shaped work is in `LIVE-GATE.md` and belongs to whoever has a signed-in
+Chrome. This is the other half, ordered so each batch is finished and committed
+before the next starts.
+
+| Batch | What | Size | Why here |
+|---|---|---|---|
+| **6** | End-to-end shell test; stale badges and README claims | S | **Done.** `test/shell.cjs` proves nonce → `/auth` → token over a real socket; the badges said "step 1 of 7" and the README said to expect 34 of 35 suites |
+| **7** | Windows CI: four `repo-edit` checks, `The "string" argument must be of type string` | S-M | The only red job, and a red job hides the next real failure. Diagnosis first: it may be one path bug |
+| **8** | Fair context sharing — drop from the heaviest message, not the heaviest participant | S | The budget is respected; the sharing is not. Cheap, and it changes what every turn sees |
+| **9** | `AWAITING_LOGIN` promotion to a visible tab | M | The transition and `signin.ts` exist; the promotion is a controller op and needs no page |
+| **10** | Delta transport (§7) | M-L | Every turn re-sends the full plan; ~70 k tokens per thread by round 7, unbounded with forced rounds. `bootTransport.ts` already has the primitives |
+| **11** | The debate UI | L | The shell page is a placeholder. Largest item, and it wants the live gate open first so it is built against real turns |
+
+Order is by cost, not by importance — with one exception: **7 before anything
+else**, because every other batch lands with a test, and a permanently red CI is
+what lets a broken test go unnoticed.
+
 ## Sequencing rules
 
 1. **Batch 1 before 3.** A manifest that silently omits the files the auditor
