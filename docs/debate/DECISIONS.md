@@ -219,6 +219,118 @@ versus sideloading. That is a batch of its own, not a variant of this one.
 against real sessions; A reuses the panel verbatim. If A is never finished, nothing
 about B is wasted.
 
+## D11 — Two participants on one provider: report it, and guard consensus instead
+
+**The question:** should the roster forbid two participants naming the same provider?
+
+**What the evidence says.** Same-model agents do not give independent opinions. In a
+live LLM prediction poll across 189 resolved snapshots, the mean residual-error
+correlation between homogeneous agents was **0.910** — and standard deliberation
+removed roughly twice as much disagreement benefit as it added through improved
+individual forecasts, with no detectable aggregate gain (ACL 2026, *Diversity and
+Deliberation in Homogeneous LLM Prediction Polls*). A groundedness-judge study found
+advocate–domain error correlation of **0.858** pooled, up to **0.927** on one dataset,
+and concluded that agents sharing a model, evidence pool and aggregation rule can
+move a decision boundary without acquiring independent evidence (arXiv 2608.00243).
+Homogeneous debate has also been measured *below* plain single-agent reasoning on
+GSM8K, MMLU and MMLU-Pro (arXiv 2606.13197, Table 1).
+
+But heterogeneity is not the free win the earlier literature claimed. A
+budget-matched study — 23 models, 11 vendor families, 5,500+ runs — rejected the
+diversity hypothesis on every axis: persona, temperature and model identity all
+failed to beat majority voting over the same roster at equal budget, team accuracy
+tracked member *capability* rather than heterogeneity, and almost all of debate's
+benefit arrived with the first exchange (arXiv 2609.35875). The prediction-poll study
+likewise found that diversity-aware selection did not detectably beat a prespecified
+random ensemble.
+
+**Decision: do not forbid it.** The evidence does not support a rule against the
+roster, and two participants on one provider is sometimes exactly what a user has —
+free tiers, one account, three providers. Forbidding it would block a working setup to
+prevent a risk that is real but narrower than "same model twice is useless".
+
+**What to do instead — guard the conclusion, not the roster.** Correlated errors only
+matter when they are counted as independent agreement. So:
+
+1. **`validateRoster` keeps reporting `sharedAccounts`** (already implemented), and
+   the panel keeps showing it at creation.
+2. **Consensus must span at least two distinct providers.** Five debaters where the
+   agreeing four include two providers is evidence; four agreeing debaters from two
+   provider accounts is one opinion sampled twice. This is the substantive fix and it
+   costs a set comparison.
+3. **Quota is a separate, practical reason to warn.** Two tabs on one account share
+   one rate limit; free tiers throttle hard, and one participant tripping a limit can
+   degrade the other mid-round. That is a warning, not a prohibition.
+
+**Not implemented yet:** point 2 changes what counts as consensus, so it needs a
+decision and a test, not just a patch.
+
+## D12 — The stall threshold is measuring the wrong thing
+
+**The question:** is 0.95 Jaccard over two consecutive turns too eager?
+
+**The threshold is not the problem; the comparison is.** 0.95 is *stricter* than the
+convention — debate orchestrators that compare whole replies default to **0.85**
+(Loomflow `convergence_similarity`), and near-duplicate detection in streaming
+detectors uses **0.8** with a cluster of 4 within a 16-item window. Two consecutive
+occurrences matches the standard "stability for two consecutive rounds" rule used by
+adaptive-stopping work (KS < 0.05 for two consecutive rounds).
+
+What is wrong is *what* is compared. The convention compares **normalised final
+positions**, not whole replies, precisely so that "two long, similarly worded
+arguments for different answers do not count as agreement, and differently worded
+replies that land on the same answer do". Our implementation hashes the whole reply.
+
+The consequence is asymmetric, and both halves are bad:
+
+- It **under-fires** on real divergence, because two genuinely different arguments
+  almost never reach 0.95 whole-text Jaccard.
+- It **over-fires** on the legitimate short reply. A debater answering "No objection
+  to this revision" twice has produced two near-identical strings and no stalling.
+
+Streaming loop detectors handle exactly this with a **length floor**: segments under
+60 normalised characters are ignored entirely, because short agreement text is
+near-identical by nature.
+
+**Recommendation, in order:**
+
+1. Compare the **final position**, not the whole reply — the same normalisation the
+   consensus check already uses.
+2. Add a **length floor** (skip replies under ~120 characters after normalisation),
+   so short agreements cannot trip a stall.
+3. Then move 0.95 to **0.85**, which is the value the orchestrators use once they are
+   comparing positions rather than prose.
+
+Only step 3 changes the constant; steps 1 and 2 change what the constant means. Doing
+3 alone would make the false positives worse.
+
+## Sources
+
+- *Diversity and Deliberation in Homogeneous LLM Prediction Polls*, ACL 2026 —
+  https://aclanthology.org/2026.realm-1.85/
+- *More Debate, Same Evidence: Structural Limits of Homogeneous Multi-Agent
+  Groundedness Judges*, arXiv 2608.00243 — https://arxiv.org/html/2608.00243
+- *ARMOR-MAD: Adaptive Routing for Heterogeneous Multi-Agent Debate*, arXiv
+  2606.13197 — https://arxiv.org/html/2606.13197
+- *Beyond Symmetric Agents: Cognitive Diversity and Multi-Agent Debate in Small
+  Language Models*, arXiv 2609.35875 — https://arxiv.org/html/2609.35875
+- *Stop Overvaluing Multi-Agent Debate*, arXiv 2502.08788 —
+  https://arxiv.org/pdf/2502.08788
+- *Talk Isn't Always Cheap: Understanding Failure Modes in Multi-Agent Debate*,
+  arXiv 2509.05396 — https://arxiv.org/pdf/2509.05396
+- *Multi-Agent Debate for LLM Judges with Adaptive Stability Detection*, arXiv
+  2510.12697 — https://arxiv.org/html/2510.12697
+- Loomflow, *Multi-Agent Debate* (convergence on normalised final answers, 0.85) —
+  https://loomflow.app/docs/architectures/debate
+- beluga-ai, `convergence_agreement.go` (agreement fraction over similarity groups) —
+  https://github.com/lookatitude/beluga-ai
+- Thinking-loop detector (word-trigram Jaccard 0.8, 60-char floor, cluster of 4) —
+  https://docs.rs/oxicode-ai/latest/src/oxicode_ai/utils/thinking_loop.rs.html
+- loop-guard (Jaccard 0.85, two-stage escalation) —
+  https://github.com/isr4el-silv4/loop-guard
+- *Sequential Consensus for Multi-Agent LLM Debates* (Wald SPRT compute governor) —
+  https://arxiv.org/html/2605.19193v1
+
 ## Still undecided
 
 - **Shared accounts.** Two participants may name the same provider, and therefore
