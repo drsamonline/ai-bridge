@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "AI Bridge Debate",
+  "version": "0.1.0",
+  "description": "Five AI web chats argue a plan to consensus. Runs in your own browser, signed in as you.",
+  "minimum_chrome_version": "116",
+  "permissions": ["sidePanel", "nativeMessaging"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "side_panel": { "default_path": "sidepanel.html" },
+  "action": { "default_title": "AI Bridge Debate" },
+  "icons": {}
+}

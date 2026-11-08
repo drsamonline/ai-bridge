@@ -122,30 +122,28 @@
   const pending = new Map();
 
   /**
-   * The token, from whichever shell we are inside.
+   * The two hosts differ here and nowhere else.
    *
-   * This is the only place the two hosts differ: the served page exchanges its
-   * one-time nonce at /auth, and the extension asks its background worker, which
-   * holds the token from the native-messaging handshake. Everything below this
-   * line is identical in both.
+   * B (served page): a WebSocket, authorised by a one-time nonce exchanged at
+   * /auth. A (extension): chrome.runtime to the background worker, which relays to
+   * the native host over stdio — and needs no token at all, because Chrome having
+   * launched the host is the authorisation, the same way socket permissions are for
+   * the unix socket. So this is a *relay*, not a credential.
    */
-  async function getToken() {
-    if (cfg.token) return cfg.token;
-    if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
-      const reply = await chrome.runtime.sendMessage({ type: 'ai-bridge:token' });
-      if (reply?.token) return reply.token;
-      throw new Error('the extension has no bridge token yet');
-    }
-    const res = await fetch('/auth', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ nonce: cfg.nonce || '' }),
+  const inExtension = () => typeof chrome !== 'undefined' && !!chrome.runtime?.id;
+
+  function callExtension(op, args) {
+    return new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage({ type: 'ai-bridge:call', op, args }, (reply) => {
+        const err = chrome.runtime.lastError;
+        if (err) return reject(new Error(err.message));
+        if (!reply) return reject(new Error('no reply from the background worker'));
+        reply.error ? reject(new Error(reply.error)) : resolve(reply.result);
+      });
     });
-    if (!res.ok) throw new Error(`/auth refused: ${res.status} ${await res.text()}`);
-    return (await res.json()).token;
   }
 
-  function call(op, args = {}) {
+  function callSocket(op, args) {
     return new Promise((resolve, reject) => {
       const id = ++seq;
       pending.set(id, { resolve, reject });
@@ -159,10 +157,28 @@
     });
   }
 
+  const call = (op, args = {}) => (inExtension() ? callExtension(op, args) : callSocket(op, args));
+
+  async function getToken() {
+    const res = await fetch('/auth', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ nonce: cfg.nonce || '' }),
+    });
+    if (!res.ok) throw new Error(`/auth refused: ${res.status} ${await res.text()}`);
+    return (await res.json()).token;
+  }
+
   async function connect() {
+    if (inExtension()) {
+      setDot('live', 'extension');
+      log('connected through the extension relay');
+      refresh();
+      return;
+    }
+
     const token = await getToken();
-    const url = cfg.wsUrl || `ws://${location.host}/`;
-    ws = new WebSocket(url);
+    ws = new WebSocket(cfg.wsUrl || `ws://${location.host}/`);
     ws.onopen = () => ws.send(JSON.stringify({ op: 'attach', token }));
     ws.onmessage = (event) => {
       let msg;

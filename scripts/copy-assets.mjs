@@ -12,7 +12,12 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
-const ASSETS = [['bridge/src/server/panel.html', 'bridge/dist/server/panel.html']];
+const ASSETS = [
+  ['bridge/src/server/panel.html', 'bridge/dist/server/panel.html'],
+  // The same file is the extension's side panel. One UI, two hosts (D10) — if this
+  // line ever diverges into two files, the shells will drift.
+  ['bridge/src/server/panel.html', 'shell/extension/sidepanel.html'],
+];
 
 let copied = 0;
 for (const [from, to] of ASSETS) {
