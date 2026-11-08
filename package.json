@@ -12,7 +12,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "tsc -b shared bridge extension",
+    "build": "tsc -b shared bridge extension && node scripts/copy-assets.mjs",
     "lint": "eslint .",
     "build:bundle": "cd extension && node esbuild.config.mjs && cd .. && node scripts/bundle-bridge.mjs",
     "clean": "rm -rf shared/dist bridge/dist extension/dist shared/*.tsbuildinfo bridge/*.tsbuildinfo extension/*.tsbuildinfo",

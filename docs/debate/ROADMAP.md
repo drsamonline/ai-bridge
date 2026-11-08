@@ -131,8 +131,9 @@ premise — a served page is enough — is weaker than the spec assumed.
 | **8** | Fair context sharing | S | **Done** |
 | **9** | `AWAITING_LOGIN` promotion to a visible tab | M | **Done.** `promoteTab` on the controller, the 3s→15s→5min wait as a pure schedule, EAUTH raised by the dispatch, and the participant degraded on expiry rather than the session |
 | **10** | `liveDispatch` integration test against the fixture page | M | **Done.** Real Chromium, real DOM, real CDP: the whole §7 payload read back out of the composer, a settle from the page rather than the debounce fallback, and the two refusal paths |
-| **11** | Delta transport (§7) | M-L | Per-thread tokens grow unbounded across forced rounds |
-| **12** | The debate UI | L | **Gated on a decision, not on work:** Option A or B, see below |
+| **11** | The panel — one UI, served by B | M | **Done.** `panel.html`, served after the nonce exchange, with the per-host difference isolated to `getToken()` |
+| **12** | The A shell — extension, native messaging, installers | L | Both shells, per D10. Reuses the panel verbatim; the cost is the host, not the UI |
+| **13** | Delta transport (§7) | M-L | Per-thread tokens grow unbounded across forced rounds |
 
 ### The decision that gates batch 12
 

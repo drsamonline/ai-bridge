@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Bridge Debate</title>
+<style>
+  :root {
+    --paper: #0a0b0f; --paper-2: #0e1016; --card: #12141b; --ink: #ece7dd;
+    --muted: #9a958a; --line: rgba(236,231,221,.12); --accent: #e0a03c;
+    --accent-soft: rgba(224,160,60,.12); --ok: #4f9e6a; --bad: #c4694f;
+    --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    --sans: 'Segoe UI', -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --paper: #f7f5f0; --paper-2: #efebe2; --card: #fffefb; --ink: #17150f;
+            --muted: #6d675c; --line: rgba(23,21,15,.13); --accent: #8f5a12;
+            --accent-soft: rgba(143,90,18,.10); --ok: #2f6b46; --bad: #9a3b22; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: 14px/1.55 var(--sans); }
+  header { display: flex; align-items: center; gap: 12px; padding: 14px 18px;
+           border-bottom: 1px solid var(--line); background: var(--paper-2); position: sticky; top: 0; }
+  header h1 { font-size: 15px; margin: 0; font-weight: 650; letter-spacing: -.01em; }
+  header .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  header .dot.live { background: var(--ok); }
+  header .dot.dead { background: var(--bad); }
+  header .where { margin-left: auto; font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+  main { padding: 18px; display: grid; gap: 16px; max-width: 860px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
+  h2 { font-family: var(--mono); font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase;
+       color: var(--muted); margin: 0 0 12px; font-weight: 500; }
+  label { display: block; font-size: 12px; color: var(--muted); margin: 0 0 4px; }
+  input, select, button { font: inherit; color: var(--ink); background: var(--paper-2);
+                          border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; }
+  input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button { cursor: pointer; }
+  button.primary { background: var(--accent); color: #12100c; border-color: transparent; font-weight: 600; }
+  /* In light mode the accent is a dark amber, so the label has to invert. */
+  @media (prefers-color-scheme: light) { button.primary { color: #fffdf9; } }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; align-items: end; }
+  .sessions { display: grid; gap: 8px; }
+  .session { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center;
+             border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; background: var(--paper-2); }
+  .session .id { font-family: var(--mono); font-size: 12px; }
+  .session .meta { font-size: 11.5px; color: var(--muted); }
+  .session .actions { display: flex; gap: 6px; }
+  .session .actions button { padding: 4px 8px; font-size: 12px; }
+  .state { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11px;
+           border: 1px solid var(--line); }
+  .state.live { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  .state.done { color: var(--ok); border-color: var(--ok); }
+  .state.bad { color: var(--bad); border-color: var(--bad); }
+  pre#log { margin: 0; font-family: var(--mono); font-size: 11.5px; color: var(--muted);
+            max-height: 190px; overflow: auto; white-space: pre-wrap; }
+  .empty { color: var(--muted); font-size: 13px; }
+  .hint { color: var(--muted); font-size: 12px; margin: 10px 0 0; }
+</style>
+</head>
+<body>
+<header>
+  <span class="dot" id="dot"></span>
+  <h1>AI Bridge Debate</h1>
+  <span class="where" id="where">connecting…</span>
+</header>
+
+<main>
+  <section>
+    <h2>Sessions</h2>
+    <div class="sessions" id="sessions"><p class="empty">No sessions yet.</p></div>
+    <p class="hint" id="hint">A session needs a planner, an auditor and up to three debaters.</p>
+  </section>
+
+  <section>
+    <h2>New session</h2>
+    <div class="row">
+      <div>
+        <label for="planner">Planner</label>
+        <select id="planner"><option value="chatgpt">chatgpt</option><option value="claude">claude</option><option value="gemini">gemini</option></select>
+      </div>
+      <div>
+        <label for="auditor">Auditor</label>
+        <select id="auditor"><option value="claude">claude</option><option value="chatgpt">chatgpt</option><option value="gemini">gemini</option></select>
+      </div>
+      <div>
+        <label for="debaters">Debaters</label>
+        <select id="debaters"><option value="3">3</option><option value="2">2</option><option value="1">1</option><option value="0">0</option></select>
+      </div>
+      <div>
+        <label for="rounds">Round budget</label>
+        <input id="rounds" type="number" min="1" max="20" value="7">
+      </div>
+      <div>
+        <button class="primary" id="create">Create</button>
+      </div>
+    </div>
+    <p class="hint">Participants are leased one tab each. Nothing is sent until you press Run.</p>
+  </section>
+
+  <section>
+    <h2>Log</h2>
+    <pre id="log"></pre>
+  </section>
+</main>
+
+<script>
+(() => {
+  const cfg = window.__BRIDGE__ || {};
+  const $ = (id) => document.getElementById(id);
+  const log = (line) => {
+    const el = $('log');
+    el.textContent = `${new Date().toLocaleTimeString()}  ${line}\n${el.textContent}`.slice(0, 8000);
+  };
+  const setDot = (state, where) => {
+    $('dot').className = `dot ${state}`;
+    $('where').textContent = where;
+  };
+
+  let ws = null;
+  let seq = 0;
+  const pending = new Map();
+
+  /**
+   * The token, from whichever shell we are inside.
+   *
+   * This is the only place the two hosts differ: the served page exchanges its
+   * one-time nonce at /auth, and the extension asks its background worker, which
+   * holds the token from the native-messaging handshake. Everything below this
+   * line is identical in both.
+   */
+  async function getToken() {
+    if (cfg.token) return cfg.token;
+    if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
+      const reply = await chrome.runtime.sendMessage({ type: 'ai-bridge:token' });
+      if (reply?.token) return reply.token;
+      throw new Error('the extension has no bridge token yet');
+    }
+    const res = await fetch('/auth', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ nonce: cfg.nonce || '' }),
+    });
+    if (!res.ok) throw new Error(`/auth refused: ${res.status} ${await res.text()}`);
+    return (await res.json()).token;
+  }
+
+  function call(op, args = {}) {
+    return new Promise((resolve, reject) => {
+      const id = ++seq;
+      pending.set(id, { resolve, reject });
+      ws.send(JSON.stringify({ op, ...args, id }));
+      setTimeout(() => {
+        if (pending.has(id)) {
+          pending.delete(id);
+          reject(new Error(`${op} timed out`));
+        }
+      }, 20000);
+    });
+  }
+
+  async function connect() {
+    const token = await getToken();
+    const url = cfg.wsUrl || `ws://${location.host}/`;
+    ws = new WebSocket(url);
+    ws.onopen = () => ws.send(JSON.stringify({ op: 'attach', token }));
+    ws.onmessage = (event) => {
+      let msg;
+      try { msg = JSON.parse(event.data); } catch { return; }
+      if (msg.op === 'ctl.event') return;              // stream noise, for later
+      const slot = msg.id != null ? pending.get(msg.id) : null;
+      if (slot) {
+        pending.delete(msg.id);
+        msg.error ? slot.reject(new Error(msg.error)) : slot.resolve(msg.result ?? msg);
+        return;
+      }
+      if (msg.note === 'already attached') {
+        setDot('live', 'connected');
+        log('connected to the bridge');
+        refresh();
+      }
+    };
+    ws.onclose = () => { setDot('dead', 'disconnected'); log('socket closed'); };
+    ws.onerror = () => setDot('dead', 'socket error');
+  }
+
+  const STATE_CLASS = (s) => (['CONSENSUS', 'HANDED_OFF'].includes(s) ? 'done'
+    : ['ABORTED', 'AUTH_BLOCKED'].includes(s) ? 'bad'
+    : s === 'ACTIVE' ? 'live' : '');
+
+  async function refresh() {
+    try {
+      const list = await call('ctl.session.list');
+      const box = $('sessions');
+      if (!Array.isArray(list) || list.length === 0) {
+        box.innerHTML = '<p class="empty">No sessions yet.</p>';
+        return;
+      }
+      box.innerHTML = '';
+      for (const s of list.slice(0, 20)) {
+        const row = document.createElement('div');
+        row.className = 'session';
+        row.innerHTML = `
+          <div>
+            <div class="id">${s.id}</div>
+            <div class="meta">round ${s.round ?? 0} · plan v${s.planVersion ?? 0} ·
+              <span class="state ${STATE_CLASS(s.state)}">${s.state}</span></div>
+          </div>
+          <div class="actions"></div>`;
+        const actions = row.querySelector('.actions');
+        for (const [label, op, extra] of [
+          ['Run', 'ctl.session.run', {}],
+          ['Resume', 'ctl.session.resume', {}],
+          ['Bundle', 'ctl.session.bundle', {}],
+          ['Abort', 'ctl.session.abort', { reason: 'stopped from the panel' }],
+        ]) {
+          const b = document.createElement('button');
+          b.textContent = label;
+          b.onclick = async () => {
+            b.disabled = true;
+            try {
+              const out = await call(op, { id: s.id, ...extra });
+              log(`${label} ${s.id}: ${JSON.stringify(out).slice(0, 160)}`);
+            } catch (err) {
+              log(`${label} ${s.id} failed: ${err.message}`);
+            }
+            b.disabled = false;
+            refresh();
+          };
+          actions.appendChild(b);
+        }
+        box.appendChild(row);
+      }
+    } catch (err) {
+      log(`list failed: ${err.message}`);
+    }
+  }
+
+  $('create').onclick = async () => {
+    const planner = $('planner').value;
+    const auditor = $('auditor').value;
+    const n = Number($('debaters').value);
+    const pool = ['claude', 'gemini', 'chatgpt'].filter((p) => p !== planner && p !== auditor);
+
+    const participants = [
+      { index: 0, role: 'planner', label: 'planner', providers: [planner], tier: 'visible' },
+      { index: 1, role: 'auditor', label: 'auditor', providers: [auditor], tier: 'visible' },
+    ];
+    for (let i = 0; i < n; i += 1) {
+      participants.push({
+        index: 2 + i, role: 'debater', label: `debater ${i + 1}`,
+        providers: [pool[i % pool.length] || 'chatgpt'], tier: 'background',
+      });
+    }
+
+    $('create').disabled = true;
+    try {
+      const out = await call('ctl.session.create', {
+        roster: { participants, roundBudget: Number($('rounds').value) },
+      });
+      if (out && out.ok === false) throw new Error(out.detail || out.code || 'refused');
+      log(`created ${out.record?.id ?? 'session'}`);
+      refresh();
+    } catch (err) {
+      log(`create failed: ${err.message}`);
+    }
+    $('create').disabled = false;
+  };
+
+  connect().catch((err) => {
+    setDot('dead', 'not connected');
+    log(err.message);
+    $('hint').textContent = 'Open this page from the URL the bridge printed — it carries a one-time key.';
+  });
+})();
+</script>
+</body>
+</html>

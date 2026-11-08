@@ -17,6 +17,7 @@
 
 import { createHash, timingSafeEqual } from 'node:crypto';
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { createServer } from 'node:http';
 import type { IncomingMessage, Server } from 'node:http';
 import type { Duplex } from 'node:stream';
@@ -95,8 +96,26 @@ export async function startBridgeServer(opts: BridgeServerOptions): Promise<Brid
   const nonces = new NonceStore();
   let guardPort = opts.port;
 
-  /** The served shell. Minimal on purpose: the debate UI does not exist yet. */
-  const shellPage = (nonce: string): string => `<!DOCTYPE html>
+  /**
+   * The served shell: one HTML file, injected with a one-time nonce.
+   *
+   * Read from `dist/` rather than inlined, so the same file can be bundled into the
+   * extension for Option A — one UI, two hosts. If it is missing the bridge still
+   * answers, because a shell that 500s tells you less than a page that says why.
+   */
+  const shellPage = (nonce: string): string => {
+    const file = path.join(__dirname, 'server', 'panel.html');
+    try {
+      const html = fs.readFileSync(file, 'utf8');
+      const config = JSON.stringify({ nonce, wsUrl: `ws://127.0.0.1:${guardPort}/` }).replace(/</g, '\\u003c');
+      return html.replace('</head>', `<script>window.__BRIDGE__ = ${config};</script>\n</head>`);
+    } catch (err) {
+      log.warn('panel.html missing; serving the fallback page', { file, error: (err as Error).message });
+      return fallbackPage(nonce);
+    }
+  };
+
+  const fallbackPage = (nonce: string): string => `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><title>AI Bridge Debate</title>
 <style>body{font:16px/1.6 system-ui,sans-serif;margin:0;background:#0a0b0f;color:#ece7dd;
 display:grid;place-items:center;min-height:100vh}main{max-width:44ch;padding:32px}

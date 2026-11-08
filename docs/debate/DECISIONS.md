@@ -195,6 +195,30 @@ started Chrome with both switches themselves.
 window that is not the one the user lives in. The alternative costs an extension, a
 native-messaging host and a per-OS installer.
 
+## D10 — Both shells, one panel
+
+**The question D9 left open:** A (extension + native messaging) or B (a page the
+bridge serves). The answer taken is **both**, because the cost is not doubled.
+
+**Decision:** one panel, two hosts. `bridge/src/server/panel.html` is a single file
+with no external assets. The bridge serves it at `/` after a nonce exchange; the
+extension will bundle the same file into its side panel. Everything the panel does
+goes through `ctl.session.*`, which is already the only surface a shell needs.
+
+**The only per-host code is `getToken()`** — eight lines. B POSTs the nonce to
+`/auth`; A asks its background worker, which holds the token from the
+native-messaging handshake. Below that function the two shells are identical, so a
+fix to the UI is a fix to both.
+
+**What A still costs, and is not shared:** an extension manifest, a side-panel
+registration, a native-messaging host binary plus a per-OS registration (registry key
+on Windows, manifest JSON on macOS and Linux), and a decision about Web Store review
+versus sideloading. That is a batch of its own, not a variant of this one.
+
+**Why this is safe to do in this order:** B is shippable today and proves the panel
+against real sessions; A reuses the panel verbatim. If A is never finished, nothing
+about B is wasted.
+
 ## Still undecided
 
 - **Shared accounts.** Two participants may name the same provider, and therefore
