@@ -661,9 +661,18 @@ async function main() {
   }
   extension.deactivate?.();
   await new Promise((r) => setTimeout(r, 2000));
+  // SIGKILL is asynchronous: the process is gone from our point of view before
+  // its children have stopped writing to the profile. Deleting the profile first
+  // is a race that loses with ENOTEMPTY on a busy machine — and because the
+  // cleanup runs after the checks, the suite then reports nothing at all.
+  const chromeExited = new Promise((r) => {
+    if (!chrome || chrome.exitCode !== null) return r();
+    chrome.once('exit', r);
+  });
   chrome.kill('SIGKILL');
+  await Promise.race([chromeExited, new Promise((r) => setTimeout(r, 5000))]);
   fixture.close();
-  fs.rmSync(stateHome, { recursive: true, force: true });
+  fs.rmSync(stateHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 
   const scrub = (t) =>
     t
@@ -732,7 +741,7 @@ async function main() {
   console.log(`\nacceptance rendering: ${acceptance}`);
   console.log(`\n${checks.length - failures}/${checks.length} checks passed`);
 
-  fs.rmSync(home, { recursive: true, force: true });
+  fs.rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
   // Chromium can still be flushing its profile when we get here.
   try {
     fs.rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });

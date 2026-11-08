@@ -408,8 +408,17 @@ async function main() {
 
   await page.close();
   await browser.close();
+  // SIGKILL is asynchronous: the process is gone from our point of view before
+  // its children have stopped writing to the profile. Deleting the profile first
+  // is a race that loses with ENOTEMPTY on a busy machine — and because the
+  // cleanup runs after the checks, the suite then reports nothing at all.
+  const chromeExited = new Promise((r) => {
+    if (!chrome || chrome.exitCode !== null) return r();
+    chrome.once('exit', r);
+  });
   chrome.kill('SIGKILL');
-  fs.rmSync(profile, { recursive: true, force: true });
+  await Promise.race([chromeExited, new Promise((r) => setTimeout(r, 5000))]);
+  fs.rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 
   const report = [
     '# Batch 1.2 — chat panel evidence (virtual scroll + proposal cards)',

@@ -318,7 +318,16 @@ async function main() {
   check('user tab still open after detach', () => assert.strictEqual(userAfterDetach, 1));
 
   // ---- 9. no browser -> ENOCDP, and no browser is launched ---------------
+  // SIGKILL is asynchronous: the process is gone from our point of view before
+  // its children have stopped writing to the profile. Deleting the profile first
+  // is a race that loses with ENOTEMPTY on a busy machine — and because the
+  // cleanup runs after the checks, the suite then reports nothing at all.
+  const chromeExited = new Promise((r) => {
+    if (!chrome || chrome.exitCode !== null) return r();
+    chrome.once('exit', r);
+  });
   chrome.kill('SIGKILL');
+  await Promise.race([chromeExited, new Promise((r) => setTimeout(r, 5000))]);
   await sleep(1200);
   const noBp = await client.request({ op: 'ctl.attach', ports: [CDP_PORT] }, 15000).then(
     () => null,
@@ -387,8 +396,8 @@ async function main() {
 
   fs.mkdirSync(path.join(ROOT, 'docs'), { recursive: true });
   fs.writeFileSync(path.join(ROOT, 'docs', 'batch-0.2-cdp-attach.md'), scrub(report));
-  fs.rmSync(home, { recursive: true, force: true });
-  fs.rmSync(profile, { recursive: true, force: true });
+  fs.rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+  fs.rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 
   console.log(`\n${results.length - failures}/${results.length} checks passed`);
   if (failures > 0) {

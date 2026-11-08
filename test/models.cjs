@@ -302,9 +302,18 @@ async function main() {
   const exited = new Promise((r) => bridge.once('exit', r));
   bridge.kill('SIGTERM');
   await exited;
+  // SIGKILL is asynchronous: the process is gone from our point of view before
+  // its children have stopped writing to the profile. Deleting the profile first
+  // is a race that loses with ENOTEMPTY on a busy machine — and because the
+  // cleanup runs after the checks, the suite then reports nothing at all.
+  const chromeExited = new Promise((r) => {
+    if (!chrome || chrome.exitCode !== null) return r();
+    chrome.once('exit', r);
+  });
   chrome.kill('SIGKILL');
+  await Promise.race([chromeExited, new Promise((r) => setTimeout(r, 5000))]);
   fixture.close();
-  fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 
   /* ------------------------------------------------------------- report */
   const report = [
