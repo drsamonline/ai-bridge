@@ -360,6 +360,38 @@ function newSession(root, over = {}) {
     assert.ok(onDisk.round >= 1);
   });
 
+  /* ------------------------------------------------- the §7 context budget */
+
+  await checkAsync('runner: the context block stays inside 6 KB however large the turns', async () => {
+    const root = tempRoot();
+    const record = newSession(root, { roundBudget: 2 });
+    const sizes = [];
+    const events = [];
+    const filler = 'x'.repeat(3000);
+    const runner = new SessionRunner({
+      root,
+      record,
+      roundBudget: 2,
+      dispatch: async (req) => {
+        sizes.push(Buffer.byteLength(req.contextText));
+        return {
+          settledBy: 'sentinel',
+          text: req.participant.role === 'planner'
+            ? plannerTurn(`# p\n${filler}`)
+            : `comment ${filler}\n[[REPLY]]`,
+        };
+      },
+      onEvent: (e) => events.push(e),
+    });
+
+    await runner.run();
+    assert.ok(sizes.length > 5);
+    const over = sizes.filter((n) => n > 6 * 1024);
+    assert.deepEqual(over, [], 'no context block may exceed the 6 KB budget');
+    assert.ok(events.some((e) => e.type === 'context.dropped'),
+      'large turns must be dropped, and the drop reported');
+  });
+
   /* ------------------------------------------- the two blockers the audit found */
 
   await checkAsync('runner: a degraded participant is written to session.json as degraded', async () => {

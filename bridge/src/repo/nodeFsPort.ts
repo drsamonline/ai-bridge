@@ -23,6 +23,21 @@ const run = promisify(execFile);
 /** A depth guard: a symlink loop must not walk forever. */
 const MAX_DEPTH = 24;
 
+/**
+ * The longest search pattern accepted as a regex.
+ *
+ * The query comes from a model's plan text, so it is untrusted input: a
+ * pathological pattern is a ReDoS on the bridge's own event loop, and the bridge
+ * is the thing driving five tabs. Anything longer is treated as a literal.
+ */
+const MAX_PATTERN = 200;
+
+export interface SkippedFile {
+  path: string;
+  bytes: number;
+  reason: 'OVERSIZE';
+}
+
 export interface NodeFsPortOptions {
   root: string;
   /** Files above this size are listed but never read into a bundle. */
@@ -36,6 +51,12 @@ export class NodeFsPort implements FsPort {
   private readonly maxFileBytes: number;
   private readonly maxFiles: number;
   private cache: string[] | null = null;
+  /**
+   * Files deliberately left out of the walk. A snapshot that silently omits a
+   * 2 MB source file is worse than one that says it did — the auditor cannot tell
+   * the difference between "not relevant" and "not shown".
+   */
+  private skippedList: SkippedFile[] = [];
 
   constructor(opts: NodeFsPortOptions) {
     this.root = path.resolve(opts.root);
@@ -62,6 +83,16 @@ export class NodeFsPort implements FsPort {
           if (SKIP_DIRS.has(entry.name)) continue;
           walk(childRel, depth + 1);
         } else if (entry.isFile() && isEditablePath(childRel)) {
+          let size = 0;
+          try {
+            size = fs.statSync(path.join(this.root, childRel)).size;
+          } catch {
+            continue;
+          }
+          if (size > this.maxFileBytes) {
+            this.skippedList.push({ path: childRel, bytes: size, reason: 'OVERSIZE' });
+            continue;
+          }
           out.push(childRel);
         }
       }
@@ -98,10 +129,19 @@ export class NodeFsPort implements FsPort {
 
   async search(query: string, opts: { regex?: boolean; maxHits?: number } = {}): Promise<SearchHit[]> {
     const maxHits = opts.maxHits ?? 200;
-    const matcher = opts.regex
-      ? new RegExp(query, 'i')
-      : null;
     const needle = query.toLowerCase();
+
+    // A regex is only attempted when the caller asked for one, the pattern is
+    // short enough to be safe, and it actually compiles. Every failure path falls
+    // back to a literal search rather than throwing or hanging.
+    let matcher: RegExp | null = null;
+    if (opts.regex && query.length > 0 && query.length <= MAX_PATTERN) {
+      try {
+        matcher = new RegExp(query, 'i');
+      } catch {
+        matcher = null;
+      }
+    }
     const hits: SearchHit[] = [];
 
     for (const relPath of await this.list()) {
@@ -134,9 +174,15 @@ export class NodeFsPort implements FsPort {
     return full;
   }
 
+  /** What the walk left out, and why. Empty when everything was included. */
+  skipped(): SkippedFile[] {
+    return [...this.skippedList].sort((a, b) => a.path.localeCompare(b.path));
+  }
+
   /** Invalidate the memoised walk after the tree changes. */
   refresh(): void {
     this.cache = null;
+    this.skippedList = [];
   }
 }
 

@@ -284,6 +284,15 @@ check('session: retention never removes a live session', () => {
   assert.ok(fs.existsSync(sessionDir(root, created.record.id)));
 });
 
+check('session: one RAM cap, shared by validation and the ledger', () => {
+  const { ramBudgetFor, leaseLedgerFor } = session;
+  const cfg = roster({ ramCapBytes: 1234 * MB });
+  assert.equal(ramBudgetFor(cfg), 1234 * MB);
+  assert.equal(leaseLedgerFor(cfg).state().capBytes, 1234 * MB,
+    'the ledger must lease against the cap the roster validated against');
+  assert.equal(ramBudgetFor(roster()), DEFAULT_RAM_CAP_BYTES, 'and both fall back to the same default');
+});
+
 check('session: the default cap is the session-configured one, not 500 MB', () => {
   assert.equal(DEFAULT_RAM_CAP_BYTES, 2000 * MB);
   assert.ok(ESTIMATED_TAB_BYTES > 0);

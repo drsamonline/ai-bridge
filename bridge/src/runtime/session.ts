@@ -58,6 +58,22 @@ export const MAX_HEADLESS_PER_PROFILE = 1;
 /** A rough figure for one signed-in consumer chat tab. Only used for projection. */
 export const ESTIMATED_TAB_BYTES = 320 * 1024 * 1024;
 
+/**
+ * The one RAM cap for a session.
+ *
+ * Roster validation and the lease ledger used to each default independently, so
+ * a roster could validate against 2000 MB and then lease against something else.
+ * Both now read the cap from here.
+ */
+export function ramBudgetFor(cfg: RosterConfig): number {
+  return cfg.ramCapBytes ?? DEFAULT_RAM_CAP_BYTES;
+}
+
+/** A lease ledger already sized to the session's budget. */
+export function leaseLedgerFor(cfg: RosterConfig, perTabBytes: number = ESTIMATED_TAB_BYTES): LeaseLedger {
+  return new LeaseLedger(ramBudgetFor(cfg), perTabBytes);
+}
+
 export type RejectionCode =
   | 'PARTICIPANT_LIMIT'
   | 'VISIBLE_LIMIT'
@@ -132,7 +148,7 @@ export function validateRoster(cfg: RosterConfig): RosterAccepted | RosterReject
   }
 
   const projectedBytes = projectRam(ps);
-  const cap = cfg.ramCapBytes ?? DEFAULT_RAM_CAP_BYTES;
+  const cap = ramBudgetFor(cfg);
   if (projectedBytes > cap) {
     return {
       ok: false,
@@ -277,7 +293,7 @@ export function createSession(root: string, cfg: RosterConfig, now: number = Dat
     round: 0,
     roundBudget: cfg.roundBudget ?? DEFAULT_ROUND_BUDGET,
     wallClockMs: cfg.wallClockMs ?? DEFAULT_WALL_CLOCK_MS,
-    ramCapBytes: cfg.ramCapBytes ?? DEFAULT_RAM_CAP_BYTES,
+    ramCapBytes: ramBudgetFor(cfg),
     participants: roster.participants,
     sub: Object.fromEntries(roster.participants.map((p) => [p.index, 'HANDSHAKE_PENDING'])),
     planVersion: 0,

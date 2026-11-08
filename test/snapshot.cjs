@@ -147,6 +147,32 @@ function bundleOf(root, files) {
       'a directory that is not a repo is a valid snapshot with no git metadata');
   });
 
+  await checkAsync('port: an invalid or oversized regex falls back to a literal search', async () => {
+    const port = new NodeFsPort({ root: fixtureRepo() });
+    // The query comes from a model's plan text, so it is untrusted input.
+    const invalid = await port.search('Repo(Reader', { regex: true });
+    assert.ok(invalid.length >= 0, 'an invalid pattern must not throw');
+    const literal = await port.search('Repo(Reader', { regex: false });
+    assert.equal(invalid.length, literal.length, 'and it must behave like a literal search');
+
+    const long = `${'a'.repeat(5000)}`;
+    const capped = await port.search(long, { regex: true });
+    assert.equal(capped.length, 0, 'an oversized pattern is treated literally, and finds nothing');
+  });
+
+  await checkAsync('port: a file over the size cap is reported, not silently dropped', async () => {
+    const root = fixtureRepo();
+    fs.writeFileSync(path.join(root, 'src/huge.ts'), 'x'.repeat(2000));
+    const port = new NodeFsPort({ root, maxFileBytes: 500 });
+    const files = await port.list();
+    assert.ok(!files.includes('src/huge.ts'), 'an oversized file is not in the walk');
+    const skipped = port.skipped();
+    assert.equal(skipped.length, 1);
+    assert.equal(skipped[0].path, 'src/huge.ts');
+    assert.equal(skipped[0].reason, 'OVERSIZE');
+    assert.ok(skipped[0].bytes >= 2000);
+  });
+
   /* -------------------------------------------------------------- the gate */
 
   check('slice: the gate refuses a plan that mentions nothing in the code', () => {

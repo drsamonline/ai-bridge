@@ -19,7 +19,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { Role, SessionState } from './stateMachine';
 import { isTerminal, transition } from './stateMachine';
-import { Scheduler, type TurnToken } from './scheduler';
+import { planContextDrops, Scheduler, type ContextMessage, type TurnToken } from './scheduler';
 import type { ParticipantSpec, SessionRecord } from './session';
 import { sessionDir, setSubState, writeRecord } from './session';
 import { exportBundle, type BundleResult, type BundleObjection } from './bundle';
@@ -61,7 +61,9 @@ export type RunnerEvent =
   /** A state-machine transition was refused: the scheduler and the machine disagree. */
   | { type: 'transition.rejected'; state: SessionState; event: string; why: string }
   | { type: 'resumed'; from: SessionState }
-  | { type: 'bundle.written'; dir: string; artifacts: number };
+  | { type: 'bundle.written'; dir: string; artifacts: number }
+  | { type: 'context.dropped'; participant: number; dropped: number; rotationIgnored: boolean }
+  | { type: 'context.truncated'; participant: number; bytes: number };
 
 export interface RunnerDeps {
   /** Sessions root — the same directory session.ts writes to. */
@@ -86,6 +88,10 @@ export interface RunResult {
 
 const RETRY_HINT = '\n\nREMINDER — end with exactly one token. No code. 500 words max.';
 
+/** §7's context block cap. The 600-character per-message trim it replaces had no
+ *  relationship to the payload budget at all. */
+const CONTEXT_BUDGET_BYTES = 6 * 1024;
+
 export class SessionRunner {
   private readonly deps: RunnerDeps;
   private record: SessionRecord;
@@ -98,6 +104,8 @@ export class SessionRunner {
   private readonly objections: Array<{ participant: number; body: string; round: number }> = [];
   private readonly transcript: Array<{ round: number; participant: number; token: string; text: string }> = [];
   private seq = 0;
+  /** Participants whose message was dropped last turn, so the rotation can skip them. */
+  private contextSkip: number[] = [];
 
   constructor(deps: RunnerDeps) {
     this.deps = deps;
@@ -257,13 +265,48 @@ export class SessionRunner {
     }
   }
 
-  /** Last three turns by the other participants — the §7 context block, minimally. */
+  /**
+   * The §7 context block: the last few turns by the other participants, capped at
+   * 6 KB, with the drop rotation applied so one participant is not permanently
+   * the one that gets cut.
+   *
+   * The rotation lives in the scheduler (it is tested there); this holds the state
+   * between turns and reports what it had to do.
+   */
   private contextBlock(participant: number): string {
-    return this.transcript
-      .filter((t) => t.participant !== participant)
-      .slice(-3)
-      .map((t) => `[round ${t.round} | participant ${t.participant}] ${t.text.slice(0, 600)}`)
+    const recent = this.transcript.filter((t) => t.participant !== participant).slice(-12);
+    const messages: ContextMessage[] = recent.map((t, i) => ({
+      participant: t.participant,
+      round: t.round,
+      chars: Buffer.byteLength(t.text),
+      seq: i,
+    }));
+
+    const plan = planContextDrops(messages, CONTEXT_BUDGET_BYTES, this.contextSkip);
+    this.contextSkip = plan.skip;
+    if (plan.dropped.length > 0) {
+      this.emit({
+        type: 'context.dropped',
+        participant,
+        dropped: plan.dropped.length,
+        rotationIgnored: plan.rotationIgnored,
+      });
+    }
+
+    const kept = new Set(plan.keep.map((m) => m.seq));
+    const text = recent
+      .map((t, i) => ({ t, i }))
+      .filter(({ i }) => kept.has(i))
+      .map(({ t }) => `[round ${t.round} | participant ${t.participant}] ${t.text}`)
       .join('\n\n');
+
+    if (Buffer.byteLength(text) <= CONTEXT_BUDGET_BYTES) return text;
+
+    // A single message larger than the whole budget cannot be dropped further, so
+    // it is cut — and said so, rather than silently arriving short.
+    const cut = Buffer.from(text).subarray(0, CONTEXT_BUDGET_BYTES).toString('utf8');
+    this.emit({ type: 'context.truncated', participant, bytes: Buffer.byteLength(cut) });
+    return cut;
   }
 
   /* ------------------------------------------------------------------- run */
