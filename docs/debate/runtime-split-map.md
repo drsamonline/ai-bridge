@@ -216,6 +216,14 @@ Step 4 is the first step allowed to change behaviour.
    across passes (so the lowest-index participant lost a message every turn).*
 5. **Extend `repo/relevance.ts` into a ranker, and add `nodeFsPort.ts`.**
    Independent of 1–4; can run in parallel with step 3.
+   *Landed — `0ba7a45`, with one deviation from this map. The repo modules went
+   to `shared/src/repo/` rather than `bridge/src/repo/`, because the VS Code
+   extension imports them for its own workspace reading and does not depend on the
+   bridge package; shared is the one place both can reach, and the moved code is
+   byte-identical. `nodeFsPort.ts` is in the bridge, as planned — a served page
+   cannot read a disk. `relevance.ts` stayed a gate and the ranker
+   (`bridge/src/repo/slice.ts`) was built on top of it, so a plan that mentions
+   nothing in the codebase still costs zero tokens.*
 6. **Harden `server.ts`** per v6 §13. Independent of everything above.
 
 Steps 1 and 2 are pure refactors and should land as their own commits so that a
