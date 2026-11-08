@@ -185,9 +185,19 @@ async function main() {
   const exited = new Promise((r) => bridge.once('exit', r));
   bridge.kill('SIGTERM');
   await exited;
+  // SIGKILL is asynchronous: the process is gone from our point of view before its
+  // children have stopped writing to the profile. Removing the directory first is
+  // a race, and on a busy machine it loses with ENOTEMPTY — which killed this
+  // suite *after* its checks had run, so it reported nothing at all. Wait for the
+  // exit, the same way the bridge above is awaited.
+  const chromeExited = new Promise((r) => {
+    if (chrome.exitCode !== null) return r();
+    chrome.once('exit', r);
+  });
   chrome.kill('SIGKILL');
+  await Promise.race([chromeExited, new Promise((r) => setTimeout(r, 5000))]);
   fixture.close();
-  fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 
   const report = [
     '# "Any provider" — custom provider adapter (spec §1)',
