@@ -363,6 +363,39 @@ function newSession(root, over = {}) {
     assert.ok(onDisk.round >= 1);
   });
 
+  await checkAsync('runner: a short turn survives a long one instead of being dropped', async () => {
+    const root = tempRoot();
+    const record = newSession(root, { roundBudget: 2 });
+    const seen = [];
+    const runner = new SessionRunner({
+      root,
+      record,
+      roundBudget: 2,
+      dispatch: async (req) => {
+        seen.push({ participant: req.participant.index, round: req.round, context: req.contextText });
+        // Participant 2 floods; participant 3 says one short, important thing.
+        if (req.participant.index === 2) {
+          return { settledBy: 'sentinel', text: `long ${'x'.repeat(4000)}\n[[REPLY]]` };
+        }
+        if (req.participant.index === 3) {
+          return { settledBy: 'sentinel', text: 'SHORT-BUT-CRITICAL\n[[REPLY]]' };
+        }
+        return {
+          settledBy: 'sentinel',
+          text: req.participant.role === 'planner' ? plannerTurn(`# p${req.round}`) : `r${req.round}\n[[REPLY]]`,
+        };
+      },
+    });
+    await runner.run();
+
+    // A turn in round 2, by someone who saw both of them.
+    const later = seen.filter((s) => s.round === 2 && s.participant === 4).pop();
+    assert.ok(later, 'expected a round-2 turn by participant 4');
+    assert.ok(later.context.includes('SHORT-BUT-CRITICAL'),
+      'the short message must survive; dropping whole messages let the long one crowd it out');
+    assert.ok(Buffer.byteLength(later.context) <= 6 * 1024, 'and the block still fits its budget');
+  });
+
   /* ------------------------------------------------- the §7 context budget */
 
   await checkAsync('runner: the context block stays inside 6 KB however large the turns', async () => {
@@ -391,8 +424,12 @@ function newSession(root, over = {}) {
     assert.ok(sizes.length > 5);
     const over = sizes.filter((n) => n > 6 * 1024);
     assert.deepEqual(over, [], 'no context block may exceed the 6 KB budget');
-    assert.ok(events.some((e) => e.type === 'context.dropped'),
-      'large turns must be dropped, and the drop reported');
+    // Since the fair-share cap landed, large turns are cut to their share rather
+    // than dropped — so the honest signal is either one, never neither.
+    assert.ok(
+      events.some((e) => e.type === 'context.dropped' || e.type === 'context.truncated'),
+      'a block that had to be cut must say so',
+    );
   });
 
   await checkAsync('runner: the snapshot slice reaches the dispatch request', async () => {

@@ -113,6 +113,16 @@ const RETRY_HINT = '\n\nREMINDER — end with exactly one token. No code. 500 wo
 /** §7's context block cap. The 600-character per-message trim it replaces had no
  *  relationship to the payload budget at all. */
 const CONTEXT_BUDGET_BYTES = 6 * 1024;
+/** Never cut a message below this, or the share becomes a list of subject lines. */
+const MIN_MESSAGE_BYTES = 256;
+/** What `[round 12 | participant 3] ` costs. */
+const HEADER_BYTES = 32;
+
+/** Cut on a byte boundary without splitting a character. */
+function cutUtf8(text: string, limit: number): string {
+  if (Buffer.byteLength(text) <= limit) return text;
+  return Buffer.from(text).subarray(0, limit).toString('utf8').replace(/\uFFFD$/, '');
+}
 
 export class SessionRunner {
   private readonly deps: RunnerDeps;
@@ -393,7 +403,31 @@ export class SessionRunner {
       seq: i,
     }));
 
-    const plan = planContextDrops(messages, CONTEXT_BUDGET_BYTES, this.contextSkip);
+    // Fair share first, drop second.
+    //
+    // Dropping whole messages meant a 500-byte turn could be cut while a 5 KB one
+    // stayed, because the drop rule picks by participant and not by size. Capping
+    // each message to its share of the budget keeps every participant represented
+    // and only drops when there are simply too many messages to hold.
+    const share = messages.length > 0 ? Math.floor(CONTEXT_BUDGET_BYTES / messages.length) : 0;
+    let cutToShare = 0;
+    const bounded = recent.map((t) => {
+      const cap = Math.max(MIN_MESSAGE_BYTES, share - HEADER_BYTES);
+      if (Buffer.byteLength(t.text) <= cap) return t.text;
+      cutToShare += 1;
+      return cutUtf8(t.text, cap);
+    });
+    if (cutToShare > 0) {
+      // Cutting a message to its share is a truncation like any other, and a
+      // silent one would be the exact failure this block was rewritten to avoid.
+      this.emit({ type: 'context.truncated', participant, bytes: cutToShare });
+    }
+
+    const plan = planContextDrops(
+      messages.map((m, i) => ({ ...m, chars: Buffer.byteLength(bounded[i] ?? '') })),
+      CONTEXT_BUDGET_BYTES,
+      this.contextSkip,
+    );
     this.contextSkip = plan.skip;
     if (plan.dropped.length > 0) {
       this.emit({
@@ -408,7 +442,7 @@ export class SessionRunner {
     const text = recent
       .map((t, i) => ({ t, i }))
       .filter(({ i }) => kept.has(i))
-      .map(({ t }) => `[round ${t.round} | participant ${t.participant}] ${t.text}`)
+      .map(({ t, i }) => `[round ${t.round} | participant ${t.participant}] ${bounded[i] ?? ''}`)
       .join('\n\n');
 
     if (Buffer.byteLength(text) <= CONTEXT_BUDGET_BYTES) return text;
