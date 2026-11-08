@@ -207,6 +207,13 @@ Step 4 is the first step allowed to change behaviour.
    chain-walk is replaced by participant-boundary failover. Expect the existing
    provider failover tests to need a debate-specific sibling rather than an edit —
    the single-prompt path keeps the old behaviour through `ctl.prompt`.
+   *Landed — `df36f04` for the scheduler and the boundary policy; the call-site
+   switch is deliberately deferred, because there is no session runner yet and
+   changing `prompt()` with no caller would put four green failover suites at
+   risk for nothing. Two real bugs surfaced while testing it: completion wiped the
+   consensus tally as the round ended (so the caller could never read the round it
+   had just finished), and the drop rotation was applied within a pass rather than
+   across passes (so the lowest-index participant lost a message every turn).*
 5. **Extend `repo/relevance.ts` into a ranker, and add `nodeFsPort.ts`.**
    Independent of 1–4; can run in parallel with step 3.
 6. **Harden `server.ts`** per v6 §13. Independent of everything above.
