@@ -23,9 +23,10 @@ const OUT = path.join(HERE, 'badges');
 const BADGES = [
   ['spec', 'v6', '#8a5210'],
   ['status', 'pre-alpha', '#8a5210'],
-  ['build', 'step 1 of 7', '#3f5c78'],
-  ['checks', '651 inherited', '#3f5c78'],
-  ['engine', 'ai-bridge', '#3f5c78'],
+  // The engine's own suites, and the whole chain it inherits from the bridge.
+  ['engine', '11 modules', '#3f5c78'],
+  ['checks', '44 suites', '#3f5c78'],
+  ['live', 'not yet run', '#8a5210'],
   ['node', '20 or newer', '#2f6b46'],
   ['licence', 'PolyForm NC', '#2f6b46'],
 ];

@@ -12,9 +12,9 @@
 
 <a href="SPEC-v6.md"><img src="badges/spec.svg" alt="spec v6" /></a>
 <a href="#what-is-proven-and-what-is-not"><img src="badges/status.svg" alt="pre-alpha" /></a>
-<a href="runtime-split-map.md"><img src="badges/build.svg" alt="step 1 of 7" /></a>
-<a href="#what-is-proven-and-what-is-not"><img src="badges/checks.svg" alt="651 inherited checks" /></a>
-<a href="https://github.com/drsamonline/ai-bridge"><img src="badges/engine.svg" alt="engine: ai-bridge" /></a>
+<a href="runtime-split-map.md"><img src="badges/engine.svg" alt="11 modules" /></a>
+<a href="#what-is-proven-and-what-is-not"><img src="badges/checks.svg" alt="44 suites" /></a>
+<a href="LIVE-GATE.md"><img src="badges/live.svg" alt="live: not yet run" /></a>
 <a href="https://nodejs.org"><img src="badges/node.svg" alt="Node 20 or newer" /></a>
 <a href="../../LICENSE"><img src="badges/licence.svg" alt="PolyForm Noncommercial 1.0.0" /></a>
 
@@ -164,8 +164,12 @@ npm run build:bundle
 node scripts/run-suites.mjs --timeout=200
 ```
 
-Expect 34 of 35 suites green. `test/release.cjs` fails 24/26 on two `docs/badges/version.svg` checks
-that fail identically on `main`; it is a stale landing-page assertion, not a code fault.
+Expect **44 of 44 suites green** on Linux or macOS. On Windows, `repo-edit` fails four checks with
+`The "string" argument must be of type string. Received type undefined` — a path bug in the applier
+that predates this work and is unrelated to it. Everything else passes on Windows.
+
+Clean before you build, not after. `tsc -b` keeps compiled output for source files that no longer
+exist, and three suites once passed for a day against stale `dist/` because of it.
 
 To drive a real browser you need Chrome started with a debugging port and signed in to the provider
 you want to use:
