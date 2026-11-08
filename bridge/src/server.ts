@@ -21,6 +21,7 @@ import { createServer } from 'node:http';
 import type { IncomingMessage, Server } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { WebSocket, WebSocketServer } from 'ws';
+import { corsHeaders, NonceStore, route } from './server/guard';
 import {
   BIND_HOST,
   CLOSE_CODES,
@@ -87,13 +88,109 @@ export async function startBridgeServer(opts: BridgeServerOptions): Promise<Brid
 
   const socketFile = socketPath();
   const socketServer = createServer();
-  const tcpServer = createServer();
+
+  // §13. The nonce is a one-time key to open the page; the protocol token is
+  // exchanged for it at /auth and never appears in a URL, where it would end up in
+  // history and in any Referer.
+  const nonces = new NonceStore();
+  let guardPort = opts.port;
+
+  /** The served shell. Minimal on purpose: the debate UI does not exist yet. */
+  const shellPage = (nonce: string): string => `<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>AI Bridge Debate</title>
+<style>body{font:16px/1.6 system-ui,sans-serif;margin:0;background:#0a0b0f;color:#ece7dd;
+display:grid;place-items:center;min-height:100vh}main{max-width:44ch;padding:32px}
+code{background:#161a22;padding:2px 6px;border-radius:4px;font-size:13px}
+p{color:#9a958a}</style></head>
+<body><main><h1>AI Bridge Debate</h1>
+<p id="status">Exchanging the one-time key…</p>
+<p>The debate interface is not built yet. This page exists so the shell's
+authorisation path is real rather than described.</p>
+<p><code id="fingerprint"></code></p>
+<script>
+const nonce = ${JSON.stringify(nonce)};
+fetch('/auth', { method: 'POST', headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ nonce }) })
+  .then((r) => r.ok ? r.json() : Promise.reject(new Error(String(r.status))))
+  .then((data) => {
+    document.getElementById('status').textContent = 'Key exchanged. Protocol token held in memory.';
+    document.getElementById('fingerprint').textContent = 'token ' + data.tokenFingerprint;
+    sessionStorage.setItem('ai-bridge-token', data.token);
+  })
+  .catch((err) => { document.getElementById('status').textContent = 'Refused: ' + err.message; });
+</script></main></body></html>`;
+
+  const tcpServer = createServer((req, res) => {
+    const decision = route(
+      { method: req.method, url: req.url, headers: req.headers as Record<string, string | undefined> },
+      guardPort,
+    );
+    const forAuth = decision.action === 'auth';
+    const headers = { 'content-type': 'text/plain; charset=utf-8', ...corsHeaders(req, guardPort, forAuth) };
+
+    if (decision.action === 'deny') {
+      log.warn('served-shell request refused', { status: decision.status, reason: decision.reason });
+      res.writeHead(decision.status, headers).end(decision.reason);
+      return;
+    }
+
+    if (decision.action === 'serve-shell') {
+      const nonce = new URL(req.url ?? '/', 'http://127.0.0.1').searchParams.get('nonce') ?? '';
+      if (!nonces.verify(nonce)) {
+        res.writeHead(403, headers).end('a live nonce is required — use the URL the bridge printed');
+        return;
+      }
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+      res.end(shellPage(nonce));
+      return;
+    }
+
+    // /auth: the only route that changes anything, and the only one that spends
+    // the nonce.
+    let body = '';
+    req.on('data', (chunk: Buffer) => {
+      body += chunk.toString('utf8');
+      if (body.length > 4096) req.destroy();
+    });
+    req.on('end', () => {
+      let presented = '';
+      try {
+        presented = (JSON.parse(body) as { nonce?: string }).nonce ?? '';
+      } catch {
+        presented = '';
+      }
+      if (!nonces.consume(presented)) {
+        res.writeHead(403, headers).end('nonce already used or invalid');
+        return;
+      }
+      res.writeHead(200, { ...headers, 'content-type': 'application/json', 'cache-control': 'no-store' });
+      res.end(
+        JSON.stringify({
+          token: opts.token,
+          tokenFingerprint: createHash('sha256').update(opts.token).digest('hex').slice(0, 12),
+        }),
+      );
+    });
+  });
 
   const upgradeWith = (viaSocket: boolean) => (
     req: IncomingMessage,
     socket: Duplex,
     head: Buffer,
   ) => {
+    if (!viaSocket) {
+      // Same rules as HTTP: a socket transport is authorised by its own
+      // permissions, a loopback TCP upgrade is not.
+      const decision = route(
+        { method: 'GET', url: req.url, headers: req.headers as Record<string, string | undefined> },
+        guardPort,
+      );
+      if (decision.action === 'deny') {
+        log.warn('websocket upgrade refused', { status: decision.status, reason: decision.reason });
+        socket.end(`HTTP/1.1 ${decision.status} Refused\r\nConnection: close\r\n\r\n`);
+        return;
+      }
+    }
     wss.handleUpgrade(req, socket, head, (ws) => {
       if (viaSocket) (ws as WebSocket & { viaSocket?: boolean }).viaSocket = true;
       wss.emit('connection', ws, req);
@@ -138,6 +235,13 @@ export async function startBridgeServer(opts: BridgeServerOptions): Promise<Brid
     });
     const addr = tcpServer.address();
     boundPort = addr && typeof addr === 'object' ? addr.port : opts.port;
+    guardPort = boundPort;
+
+    const nonce = nonces.issue();
+    log.info(`served shell: http://127.0.0.1:${boundPort}/?nonce=${nonce}`, {
+      expiresInMs: 5 * 60 * 1000,
+      note: 'single use; exchange it at /auth for the protocol token',
+    });
   }
 
   log.info(
