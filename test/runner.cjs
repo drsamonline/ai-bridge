@@ -360,6 +360,164 @@ function newSession(root, over = {}) {
     assert.ok(onDisk.round >= 1);
   });
 
+  /* ------------------------------------------- the two blockers the audit found */
+
+  await checkAsync('runner: a degraded participant is written to session.json as degraded', async () => {
+    const root = tempRoot();
+    const record = newSession(root, { roundBudget: 1 });
+    const runner = new SessionRunner({
+      root,
+      record,
+      dispatch: async (req) => {
+        if (req.participant.index === 3) throw new Error('ENOTAB');
+        return {
+          settledBy: 'sentinel',
+          text: req.participant.role === 'planner' ? plannerTurn('# p') : 'ok\n[[REPLY]]',
+        };
+      },
+    });
+    await runner.run();
+
+    const onDisk = JSON.parse(fs.readFileSync(path.join(sessionDir(root, record.id), 'session.json'), 'utf8'));
+    // It used to say HANDSHAKE_PENDING for everyone, forever.
+    assert.equal(onDisk.sub['3'], 'DEGRADED', 'the degraded participant must be recorded as such');
+    assert.equal(onDisk.sub['0'], 'ACTIVE', 'the others are still dispatchable');
+  });
+
+  await checkAsync('bundle: consensus produces all five artifacts with a manifest', async () => {
+    const root = tempRoot();
+    const record = newSession(root, { roundBudget: 7 });
+    const runner = new SessionRunner({
+      root,
+      record,
+      dispatch: async (req) => ({
+        settledBy: 'sentinel',
+        text: req.participant.role === 'planner' ? plannerTurn('# agreed plan', '[[CONSENSUS]]') : 'agreed\n[[CONSENSUS]]',
+      }),
+    });
+    await runner.run();
+
+    const out = runner.confirmBundle({ id: 'snap-1', sha256: 'abc123', capturedAt: 1 });
+    assert.equal(out.ok, true);
+    const files = fs.readdirSync(out.bundle.dir).sort();
+    assert.deepEqual(files, ['manifest.json', 'objections-resolved.md', 'plan.md', 'questions.md', 'transcript.md']);
+
+    const manifest = out.bundle.manifest;
+    assert.equal(manifest.state, 'AWAITING_HANDOFF_CONFIRM', 'the state at export time');
+    assert.equal(manifest.planIsFrozenAfterConsensus, true);
+    assert.equal(manifest.snapshot.sha256, 'abc123', 'the bundle must name the snapshot it was judged against');
+    assert.equal(manifest.artifacts.length, 4);
+    assert.ok(manifest.artifacts.every((a) => a.sha256.length === 64), 'every artifact is hashed');
+    assert.ok(manifest.transcript.shards > 0);
+    assert.match(fs.readFileSync(path.join(out.bundle.dir, 'plan.md'), 'utf8'), /agreed plan/);
+    assert.match(fs.readFileSync(path.join(out.bundle.dir, 'transcript.md'), 'utf8'), /## Round 1/);
+  });
+
+  await checkAsync('bundle: an unanswered objection ships as open, not silently dropped', async () => {
+    const root = tempRoot();
+    const record = newSession(root, { roundBudget: 7 });
+    const runner = new SessionRunner({
+      root,
+      record,
+      dispatch: async (req) => ({
+        settledBy: 'sentinel',
+        text: req.participant.index === 1
+          ? 'This will not survive a rollback.\n[[OBJECTION: no down migration | high]]'
+          : req.participant.role === 'planner' ? plannerTurn('# p', '[[CONSENSUS]]') : 'ok\n[[CONSENSUS]]',
+      }),
+    });
+    const halted = await runner.run();
+    assert.equal(halted.state, 'NEEDS_USER', 'an objection leaves the claim with the user');
+    assert.equal(runner.confirmConsensus(), true, 'and the user can accept it');
+
+    const out = runner.confirmBundle();
+    assert.equal(out.ok, true);
+    assert.equal(out.bundle.manifest.objections.total, 1);
+    assert.equal(out.bundle.manifest.objections.open, 1);
+    assert.match(fs.readFileSync(path.join(out.bundle.dir, 'objections-resolved.md'), 'utf8'), /\*\*Open\.\*\*/);
+  });
+
+  await checkAsync('runner: resume gets a NEEDS_USER session moving again', async () => {
+    const root = tempRoot();
+    const record = newSession(root, { roundBudget: 1 });
+    let answered = false;
+    const runner = new SessionRunner({
+      root,
+      record,
+      dispatch: async (req) => {
+        if (req.participant.index === 1 && !answered) {
+          answered = true;
+          return { settledBy: 'sentinel', text: 'Which db?\n[[ASK_USER: pg or sqlite? | pg | sqlite]]' };
+        }
+        return {
+          settledBy: 'sentinel',
+          text: req.participant.role === 'planner' ? plannerTurn('# p') : 'ok\n[[REPLY]]',
+        };
+      },
+    });
+
+    const halted = await runner.run();
+    assert.equal(halted.state, 'NEEDS_USER');
+    const resumed = await runner.resume();
+    assert.notEqual(resumed.state, 'NEEDS_USER', 'the session must move on after the user answers');
+    assert.ok(resumed.turns > halted.turns);
+  });
+
+  await checkAsync('runner: the turn ceiling halts instead of leaving a live session', async () => {
+    const root = tempRoot();
+    const record = newSession(root, { roundBudget: 7 });
+    const runner = new SessionRunner({
+      root,
+      record,
+      maxTurns: 1,
+      dispatch: async (req) => ({
+        settledBy: 'sentinel',
+        text: req.participant.role === 'planner' ? plannerTurn('# p') : 'ok\n[[REPLY]]',
+      }),
+    });
+    const result = await runner.run();
+    assert.equal(result.state, 'NEEDS_USER');
+    assert.equal(result.reason, 'GUARD_TRIPPED');
+  });
+
+  await checkAsync('runner: a bundle cannot be confirmed from a state that is not consensus', async () => {
+    const root = tempRoot();
+    const record = newSession(root, { roundBudget: 1 });
+    const events = [];
+    const runner = new SessionRunner({
+      root,
+      record,
+      dispatch: async (req) => ({
+        settledBy: 'sentinel',
+        text: req.participant.role === 'planner' ? plannerTurn('# p') : 'ok\n[[REPLY]]',
+      }),
+      onEvent: (e) => events.push(e),
+    });
+    await runner.run();
+    const out = runner.confirmBundle();
+    assert.equal(out.ok, false, 'the budget halt is not a consensus');
+    assert.ok(events.some((e) => e.type === 'transition.rejected'),
+      'a refused transition must be reported, not swallowed');
+  });
+
+  await checkAsync('runner: confirming the build reaches HANDED_OFF and records it', async () => {
+    const root = tempRoot();
+    const record = newSession(root, { roundBudget: 7 });
+    const runner = new SessionRunner({
+      root,
+      record,
+      dispatch: async (req) => ({
+        settledBy: 'sentinel',
+        text: req.participant.role === 'planner' ? plannerTurn('# p', '[[CONSENSUS]]') : 'ok\n[[CONSENSUS]]',
+      }),
+    });
+    await runner.run();
+    assert.equal(runner.confirmBundle().ok, true);
+    assert.equal(runner.confirmHandoff(), true);
+    const onDisk = JSON.parse(fs.readFileSync(path.join(sessionDir(root, record.id), 'session.json'), 'utf8'));
+    assert.equal(onDisk.state, 'HANDED_OFF');
+  });
+
   for (const root of roots) {
     fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
   }

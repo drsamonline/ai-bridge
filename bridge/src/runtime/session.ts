@@ -322,6 +322,24 @@ export function saveState(root: string, record: SessionRecord, state: SessionSta
  * scan infers it: a non-terminal session whose last mutation predates this
  * process start was live when the last process died.
  */
+/**
+ * Persist one participant's sub-state. The runner used to change participants'
+ * dispatchability and never write it down, so session.json claimed every
+ * participant was still mid-handshake after a whole debate — and reconstruct
+ * reloaded that fiction after a crash.
+ */
+export function setSubState(
+  root: string,
+  record: SessionRecord,
+  index: number,
+  sub: string,
+  now: number = Date.now(),
+): SessionRecord {
+  const next = { ...record, sub: { ...record.sub, [index]: sub }, lastMutationAt: now };
+  writeRecord(root, next);
+  return next;
+}
+
 export function reconstruct(root: string, processStartedAt: number): SessionRecord[] {
   const dir = path.join(root, 'sessions');
   let entries: string[] = [];

@@ -56,6 +56,7 @@ export type HaltReason =
   | 'PLANNER_DEGRADED'
   | 'AUDITOR_DEGRADED'
   | 'STREAM_TIMEOUT'
+  | 'GUARD_TRIPPED'
   | 'HANDED_OFF';
 
 /**
@@ -69,6 +70,7 @@ export const HALT_CLASS: Record<HaltReason, 'terminal' | 'transient' | 'configur
   STALLED: 'user-gated',
   WALL_CLOCK: 'user-gated',
   STREAM_TIMEOUT: 'user-gated',
+  GUARD_TRIPPED: 'user-gated',
   HANDSHAKE_FAILED: 'terminal',
   AUTH_BLOCKED: 'terminal',
   STORAGE_FULL: 'terminal',
@@ -161,7 +163,13 @@ export type SessionEvent =
   | { type: 'block.timeout'; participant: number }
   | { type: 'reattach.passed'; participant: number }
   | { type: 'reattach.failed'; participant: number }
-  | { type: 'session.selected' };
+  | { type: 'session.selected' }
+  /**
+   * A loop guard fired — the runner's turn ceiling. Without it an exhausted
+   * guard left the session in ACTIVE, which is a live session that is not
+   * running: the worst of both.
+   */
+  | { type: 'guard.tripped'; reason: string };
 
 export type SessionEventType = SessionEvent['type'];
 
@@ -369,6 +377,11 @@ export function transition(state: SessionState, event: SessionEvent): Transition
     case 'reattach.passed':
     case 'reattach.failed':
       return state === 'ACTIVE' ? ok('ACTIVE', { participant: event.participant }) : no(`${event.type} is only valid in ACTIVE, not ${state}`);
+
+    case 'guard.tripped':
+      return state === 'ACTIVE'
+        ? ok('NEEDS_USER', { reason: 'GUARD_TRIPPED', note: event.reason })
+        : no(`guard.tripped is only valid in ACTIVE, not ${state}`);
 
     case 'session.selected':
       // DECISION: the spec says "SUSPENDED → REATTACHING per participant", but

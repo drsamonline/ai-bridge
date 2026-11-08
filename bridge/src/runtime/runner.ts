@@ -21,7 +21,8 @@ import type { Role, SessionState } from './stateMachine';
 import { isTerminal, transition } from './stateMachine';
 import { Scheduler, type TurnToken } from './scheduler';
 import type { ParticipantSpec, SessionRecord } from './session';
-import { sessionDir, writeRecord } from './session';
+import { sessionDir, setSubState, writeRecord } from './session';
+import { exportBundle, type BundleResult, type BundleObjection } from './bundle';
 import { escalationAccepted, extractFenced, parseToken, type SettleBy, type Token } from './token';
 
 export interface DispatchRequest {
@@ -56,7 +57,11 @@ export type RunnerEvent =
   | { type: 'escalate'; participant: number; accepted: boolean; applied: boolean; escalates: number }
   | { type: 'degraded'; participant: number; reason: string }
   | { type: 'objection'; participant: number; body: string; round: number }
-  | { type: 'halt'; state: SessionState; reason: string | null };
+  | { type: 'halt'; state: SessionState; reason: string | null }
+  /** A state-machine transition was refused: the scheduler and the machine disagree. */
+  | { type: 'transition.rejected'; state: SessionState; event: string; why: string }
+  | { type: 'resumed'; from: SessionState }
+  | { type: 'bundle.written'; dir: string; artifacts: number };
 
 export interface RunnerDeps {
   /** Sessions root — the same directory session.ts writes to. */
@@ -83,6 +88,7 @@ const RETRY_HINT = '\n\nREMINDER — end with exactly one token. No code. 500 wo
 
 export class SessionRunner {
   private readonly deps: RunnerDeps;
+  private record: SessionRecord;
   private readonly scheduler: Scheduler;
   private readonly now: () => number;
   private state: SessionState;
@@ -95,6 +101,7 @@ export class SessionRunner {
 
   constructor(deps: RunnerDeps) {
     this.deps = deps;
+    this.record = deps.record;
     this.now = deps.now ?? (() => Date.now());
     this.state = deps.record.state === 'INITIALIZING' ? 'ACTIVE' : deps.record.state;
     this.planVersion = deps.record.planVersion ?? 0;
@@ -102,6 +109,13 @@ export class SessionRunner {
       participants: deps.record.participants.map((p) => ({ index: p.index, role: p.role, providers: p.providers })),
       roundBudget: deps.roundBudget ?? deps.record.roundBudget,
     });
+
+    // The handshake phase is not implemented yet, so the runner starts every
+    // participant dispatchable. Recording that is the point: session.json used to
+    // keep saying HANDSHAKE_PENDING forever because nobody wrote the truth down.
+    for (const p of deps.record.participants) {
+      this.record = setSubState(this.deps.root, this.record, p.index, 'ACTIVE', this.now());
+    }
   }
 
   private emit(event: RunnerEvent): void {
@@ -114,12 +128,23 @@ export class SessionRunner {
     return found;
   }
 
-  /** Apply a state-machine event. A refused transition is a scheduler bug, not a halt. */
-  private apply(event: Parameters<typeof transition>[1]): void {
+  /**
+   * Apply a state-machine event.
+   *
+   * A refused transition used to be dropped on the floor, which meant a
+   * disagreement between the scheduler and the machine disappeared silently — the
+   * same class of bug the state machine's totality was built to prevent. It now
+   * returns whether it applied and raises an event when it did not.
+   */
+  private apply(event: Parameters<typeof transition>[1]): boolean {
     const result = transition(this.state, event);
-    if (!result.ok) return;
+    if (!result.ok) {
+      this.emit({ type: 'transition.rejected', state: this.state, event: event.type, why: result.rejected });
+      return false;
+    }
     this.state = result.state;
     if (result.reason) this.reason = result.reason;
+    return true;
   }
 
   private halted(): boolean {
@@ -216,6 +241,7 @@ export class SessionRunner {
   }
 
   private degrade(participant: ParticipantSpec, why: string): void {
+    this.record = setSubState(this.deps.root, this.record, participant.index, 'DEGRADED', this.now());
     const result = this.scheduler.degrade(participant.index, why);
     this.apply({ type: 'participant.degraded', participant: participant.index, role: participant.role as Role, reason: why });
     if (result.roundCompleted) this.emit({ type: 'round.complete', round: this.scheduler.snapshot().round - 1 });
@@ -304,6 +330,13 @@ export class SessionRunner {
       }
     }
 
+    // A guard that fires must halt. Falling out of the loop in ACTIVE produced a
+    // session that looked live and was not running — the worst of both.
+    if (this.turns >= maxTurns && this.state === 'ACTIVE') {
+      this.apply({ type: 'guard.tripped', reason: `turn ceiling of ${maxTurns} reached` });
+      this.emit({ type: 'halt', state: this.state, reason: this.reason });
+    }
+
     return this.result();
   }
 
@@ -311,9 +344,15 @@ export class SessionRunner {
   private finish(): void {
     const snap = this.scheduler.snapshot();
 
+    const planner = this.record.participants.find((p) => p.role === 'planner');
+
     if (snap.phase === 'reservation') {
-      // The planner is not dispatchable, so the reserved turn cannot run.
-      this.apply({ type: 'participant.degraded', participant: 0, role: 'planner', reason: 'PLANNER_DEGRADED' });
+      // The planner is not dispatchable, so the reserved turn cannot run. Resolved
+      // by role: assuming participant 0 is the planner mislabels the halt whenever
+      // the roster is not in index order.
+      if (planner) {
+        this.apply({ type: 'participant.degraded', participant: planner.index, role: 'planner', reason: 'PLANNER_DEGRADED' });
+      }
       this.emit({ type: 'halt', state: this.state, reason: this.reason });
       return;
     }
@@ -323,15 +362,16 @@ export class SessionRunner {
       this.emit({ type: 'halt', state: this.state, reason: this.reason });
       return;
     }
-    this.apply({ type: 'participant.degraded', participant: 0, role: 'planner', reason: 'NO_ACTIVE_PARTICIPANTS' });
+    if (planner) {
+      this.apply({ type: 'participant.degraded', participant: planner.index, role: 'planner', reason: 'NO_ACTIVE_PARTICIPANTS' });
+    }
     this.emit({ type: 'halt', state: this.state, reason: this.reason });
   }
 
-  private result(): RunResult {
-    // Keep the record current, so a killed process reconstructs the truth rather
-    // than the state the session was created in.
-    const record: SessionRecord = {
-      ...this.deps.record,
+  /** Keep the record current, so a killed process reconstructs the truth. */
+  private persistRecord(): void {
+    this.record = {
+      ...this.record,
       state: this.state,
       reason: this.reason ?? undefined,
       planVersion: this.planVersion,
@@ -339,11 +379,68 @@ export class SessionRunner {
       lastMutationAt: this.now(),
     };
     try {
-      writeRecord(this.deps.root, record);
+      writeRecord(this.deps.root, this.record);
     } catch {
       // A failed write is reported by the caller's storage check, not swallowed
       // into a successful run.
     }
+  }
+
+  /* ------------------------------------------------------- the missing exits */
+
+  /**
+   * NEEDS_USER -> ACTIVE, and keep playing. The audit found this missing: the
+   * state machine had the transition and nothing called it, so every session that
+   * asked the user a question was terminal in practice.
+   */
+  async resume(): Promise<RunResult> {
+    const from = this.state;
+    if (!this.apply({ type: 'user.resume' })) return this.result();
+    this.emit({ type: 'resumed', from });
+    return this.run();
+  }
+
+  /**
+   * CONSENSUS -> AWAITING_HANDOFF_CONFIRM, then write the bundle (§9). This is the
+   * product's actual output; without it a session that reached consensus left a
+   * plan file and a directory of shards and stopped.
+   */
+  confirmBundle(snapshot?: { id: string; sha256: string; capturedAt: number }): { ok: boolean; bundle?: BundleResult } {
+    if (!this.apply({ type: 'user.confirm.bundle' })) return { ok: false };
+    this.persistRecord();
+
+    const bundle = exportBundle({
+      root: this.deps.root,
+      record: this.record,
+      planVersion: this.planVersion,
+      objections: this.objections.map((o) => ({ ...o }) as BundleObjection),
+      snapshot: snapshot ?? null,
+      now: this.now(),
+    });
+    this.emit({ type: 'bundle.written', dir: bundle.dir, artifacts: bundle.files.length });
+    return { ok: true, bundle };
+  }
+
+  /**
+   * NEEDS_USER -> CONSENSUS. A unilateral claim lands here rather than stopping,
+   * so without this the user could never accept a plan the debate did not agree on
+   * — which is the whole point of routing a claim through the user.
+   */
+  confirmConsensus(): boolean {
+    const ok = this.apply({ type: 'user.confirm.consensus' });
+    if (ok) this.persistRecord();
+    return ok;
+  }
+
+  /** The user confirmed the build in Sarvam — the machine's last transition. */
+  confirmHandoff(): boolean {
+    const ok = this.apply({ type: 'handoff.confirmed' });
+    if (ok) this.persistRecord();
+    return ok;
+  }
+
+  private result(): RunResult {
+    this.persistRecord();
     return {
       state: this.state,
       reason: this.reason,
