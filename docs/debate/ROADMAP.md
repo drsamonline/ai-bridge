@@ -78,6 +78,10 @@ that makes the engine usable from outside without touching a browser.
 
 ## Batch 4 — the served shell's security
 
+**Done — `6b2b18e`.** Guard module plus the wiring, 13 checks. The server had no
+HTTP request handler at all, so this also added the minimal shell page the
+authorisation path needed to be real.
+
 Map step 7. Independent of everything above, and it should not wait for batch 5 —
 it is a hole in a page the bridge already serves.
 
