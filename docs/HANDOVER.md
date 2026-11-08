@@ -45,7 +45,7 @@ All of this is code-shaped: no browser, no account, and a test can prove each on
 
 | # | What | Files | Why it matters |
 |---|---|---|---|
-| 1 | **Windows CI is red** — four `repo-edit` checks, `The "string" argument must be of type string. Received type undefined` | `extension/src/repo/applier.ts` | It is the only red CI, and a permanently red job hides the next real failure. Pre-existing, but it is now the thing masking everything else |
+| 1 | ~~**Windows CI is red**~~ — **fixed.** It was `test/repo-edit.cjs`'s `readAll`, which keyed its file map with an unnormalised `path.relative` | `test/repo-edit.cjs` | The applier was never at fault: on Windows the map keys were `src\\format.ts` while the checks indexed `src/format.ts`, so every lookup was undefined |
 | 2 | **Delta transport (§7)** | `runtime/payload.ts`, `runtime/runner.ts` | Every turn re-sends the full plan and context. Per participant thread that is ~70 k tokens by round 7, and unbounded once the user forces rounds. `bootTransport.ts` already has `composeBoot`/`deltaLineCount` |
 | 3 | **Context block drops whole messages** | `runtime/runner.ts` `contextBlock` | One long turn can crowd out several short ones. The budget is respected; the sharing is not fair |
 | 4 | **`AWAITING_LOGIN` promotion** | `runtime/runner.ts`, `cdp/controller.ts` | The transition and `signin.ts` both exist; promotion to a visible tab is a controller op and needs no page |

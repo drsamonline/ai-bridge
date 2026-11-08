@@ -192,7 +192,10 @@ const readAll = (root) => {
         if (entry.name === 'node_modules') continue;
         walk(full);
       } else {
-        out[path.relative(root, full)] = fs.readFileSync(full, 'utf8');
+        // POSIX-keyed, like nodeFsPort() and state-boot's walk already are. On
+        // Windows path.relative returns `src\\format.ts`, so an unnormalised key
+        // silently misses every lookup and assert.match gets undefined.
+        out[path.relative(root, full).split(path.sep).join('/')] = fs.readFileSync(full, 'utf8');
       }
     }
   };
@@ -320,6 +323,15 @@ async function main() {
     assert.ok(!after['src/format.ts'].includes('oldName('), 'old name still in format.ts');
     assert.match(after['src/use-a.ts'], /newName\(input\)/);
     assert.match(after['src/use-b.ts'], /newName\(s\)/);
+  });
+
+  check('the file map is keyed POSIX-style, so these checks run on Windows too', () => {
+    // The suite's own bug: readAll used path.relative unnormalised, so on Windows
+    // every key was `src\\format.ts` and every lookup returned undefined —
+    // which assert.match reports as "the string argument must be of type string".
+    for (const key of Object.keys(readAll(root))) {
+      assert.ok(!key.includes('\\'), `backslash in a map key: ${key}`);
+    }
   });
 
   /* ------------------------------------------------ 4. reject = no change */

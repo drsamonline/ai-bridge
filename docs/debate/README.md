@@ -164,9 +164,7 @@ npm run build:bundle
 node scripts/run-suites.mjs --timeout=200
 ```
 
-Expect **44 of 44 suites green** on Linux or macOS. On Windows, `repo-edit` fails four checks with
-`The "string" argument must be of type string. Received type undefined` — a path bug in the applier
-that predates this work and is unrelated to it. Everything else passes on Windows.
+Expect **45 of 45 suites green** on Linux, macOS and Windows.
 
 Clean before you build, not after. `tsc -b` keeps compiled output for source files that no longer
 exist, and three suites once passed for a day against stale `dist/` because of it.
