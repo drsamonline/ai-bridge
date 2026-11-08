@@ -10,6 +10,10 @@ Sizes: **S** ≈ an hour, **M** ≈ half a day, **L** ≈ multi-day.
 
 ## Batch 1 — quick wins
 
+**Done — `8a23229`.** All five landed with tests; 41/41 suites green after a clean
+build. The context budget and the drop rotation are now live in the runner, the
+port reports what it skipped, and there is one RAM cap.
+
 Five small, independent, local fixes. No new surface, no browser, each one a
 failing test first. This batch exists because every item is a correctness or
 robustness hole that would otherwise be discovered in batch 5, when a real
