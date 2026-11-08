@@ -26,6 +26,7 @@ import type { Dispatch, DispatchRequest, DispatchResult } from './runner';
 import { resolveParticipantProvider } from './scheduler';
 import { buildPayload } from './payload';
 import type { SettleBy } from './token';
+import { looksLikeSignIn } from '../adapters/signin';
 
 export interface LiveDispatchDeps {
   relay: Pick<Relay, 'sendAndObserve'>;
@@ -77,6 +78,13 @@ export function createLiveDispatch(deps: LiveDispatchDeps): Dispatch {
 
     const page = deps.pageFor(req.participant.index);
     if (!page) throw new Error(`ENOTAB: participant ${req.participant.index} has no leased tab`);
+
+    // A sign-in page is a person, not a broken selector. Raising it as its own
+    // error is what lets the runner wait instead of degrading the participant.
+    const url = page.url();
+    if (looksLikeSignIn(url)) {
+      throw new Error(`EAUTH: ${choice.provider} is showing a sign-in page at ${url}`);
+    }
 
     const adapter: Adapter = await deps.adapters.get(choice.provider);
     if (!(await adapter.isReady(page))) await adapter.connect(page);

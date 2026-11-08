@@ -354,6 +354,34 @@ export class CdpController extends EventEmitter {
     };
   }
 
+  /** The page behind a tab id. Null when the tab is not ours or has gone. */
+  pageOf(tabId: string): Page | null {
+    return this.tabs.get(tabId)?.page ?? null;
+  }
+
+  /**
+   * Bring a tab to the front so a human can sign in to it.
+   *
+   * Promotion is the only thing a participant waiting for login needs: the page
+   * is already real, already ours, and already on the right origin — it is just
+   * behind four other tabs. `bringToFront` is a CDP call, so it works on a tab
+   * that is not the active one.
+   */
+  async promoteTab(tabId: string): Promise<boolean> {
+    const record = this.tabs.get(tabId);
+    if (!record) return false;
+    try {
+      await record.page.bringToFront();
+      this.activeTabId = tabId;
+      record.lastActivityAt = Date.now();
+      this.opts.log.info('promoted tab for sign-in', { tabId, url: record.page.url() });
+      return true;
+    } catch (err) {
+      this.opts.log.warn('could not promote tab', { tabId, error: (err as Error).message });
+      return false;
+    }
+  }
+
   get activePage(): Page | null {
     return this.activeRecord()?.page ?? null;
   }

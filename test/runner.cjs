@@ -490,6 +490,102 @@ function newSession(root, over = {}) {
     );
   });
 
+  /* ------------------------------------------------------ batch 9: sign-in */
+
+  check('login: the backoff is 3s, then x1.5 to a 15s cap', () => {
+    const { LoginWait } = require('../bridge/dist/runtime/login.js');
+    const wait = new LoginWait({ now: () => 0 });
+    const delays = [1, 2, 3, 4, 5, 6].map(() => wait.nextDelayMs());
+    assert.deepEqual(delays, [3000, 4500, 6750, 10125, 15000, 15000]);
+  });
+
+  check('login: the wait expires at the ceiling, not before', () => {
+    const { LoginWait } = require('../bridge/dist/runtime/login.js');
+    let clock = 0;
+    const wait = new LoginWait({ now: () => clock });
+    clock = 4 * 60 * 1000;
+    assert.equal(wait.expired(), false, 'four minutes is still a person typing');
+    clock = 5 * 60 * 1000;
+    assert.equal(wait.expired(), true);
+  });
+
+  await checkAsync('login: a sign-in page promotes the tab, waits, and resends the turn', async () => {
+    const root = tempRoot();
+    const record = newSession(root, { roundBudget: 1 });
+    let clock = 0;
+    let promoted = 0;
+    let polls = 0;
+    let authFailures = 0;
+    const events = [];
+
+    const runner = new SessionRunner({
+      root,
+      record,
+      now: () => clock,
+      dispatch: async (req) => {
+        // The planner is signed out on its first attempt, then fine.
+        if (req.participant.role === 'planner' && authFailures === 0) {
+          authFailures += 1;
+          throw new Error('EAUTH: chatgpt is showing a sign-in page');
+        }
+        return {
+          settledBy: 'sentinel',
+          text: req.participant.role === 'planner' ? plannerTurn(`# p${req.round}`) : `r${req.round}\n[[REPLY]]`,
+        };
+      },
+      login: {
+        promote: async () => {
+          promoted += 1;
+        },
+        ready: async () => {
+          polls += 1;
+          return polls >= 2; // signed in on the second look
+        },
+        sleep: async (ms) => {
+          clock += ms;
+        },
+      },
+      onEvent: (e) => events.push(e),
+    });
+
+    const result = await runner.run();
+    assert.equal(promoted, 1, 'the tab must be brought to the front exactly once');
+    assert.equal(polls, 2, 'and polled until it was ready');
+    assert.ok(events.some((e) => e.type === 'login.required'));
+    assert.ok(events.some((e) => e.type === 'login.succeeded'));
+    assert.notEqual(result.state, 'NEEDS_USER', 'a sign-in must not end the session');
+    assert.ok(result.planVersion >= 1, 'and the turn must actually have been sent afterwards');
+  });
+
+  await checkAsync('login: nobody signs in, so the participant is degraded and the debate goes on', async () => {
+    const root = tempRoot();
+    const record = newSession(root, { roundBudget: 1 });
+    let clock = 0;
+    const runner = new SessionRunner({
+      root,
+      record,
+      now: () => clock,
+      dispatch: async (req) => {
+        if (req.participant.index === 3) throw new Error('EAUTH: gemini needs a sign-in');
+        return {
+          settledBy: 'sentinel',
+          text: req.participant.role === 'planner' ? plannerTurn(`# p${req.round}`) : `r${req.round}\n[[REPLY]]`,
+        };
+      },
+      login: {
+        promote: async () => {},
+        ready: async () => false,
+        sleep: async (ms) => {
+          clock += ms;
+        },
+      },
+    });
+
+    const result = await runner.run();
+    assert.ok(clock >= 5 * 60 * 1000, 'the ceiling must be reached before giving up');
+    assert.equal(result.state, 'BUDGET_EXHAUSTED', 'one unsignable debater must not stop the session');
+  });
+
   /* ------------------------------------------------------- batch 2: the states */
 
   await checkAsync('questions: an open question turns an agreement into a question', async () => {

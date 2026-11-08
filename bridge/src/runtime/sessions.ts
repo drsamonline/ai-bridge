@@ -19,8 +19,9 @@ import type { CdpController } from '../cdp/controller';
 import type { AdapterRegistry } from '../adapters/registry';
 import type { Logger } from '../logger';
 import type { Relay } from './relay';
-import type { Dispatch } from './runner';
+import type { Dispatch, LoginHooks } from './runner';
 import { SessionRunner, type RunResult } from './runner';
+import { looksLikeSignIn } from '../adapters/signin';
 import type { BundleResult } from './bundle';
 import type { ParticipantSpec, RosterConfig, RosterRejection, SessionRecord } from './session';
 import { createSession, leaseLedgerFor, loadSession, maintenance, saveState, sessionDir } from './session';
@@ -148,6 +149,7 @@ export class SessionManager {
       root: this.deps.root,
       record,
       dispatch: dispatch ?? this.buildDispatch(record),
+      login: this.loginHooks(record.id, record),
       ...(snapshot
         ? {
             snapshot: {
@@ -162,6 +164,37 @@ export class SessionManager {
     });
     this.runners.set(record.id, runner);
     return runner;
+  }
+
+  /**
+   * What a participant waiting for a human needs, resolved against real tabs.
+   *
+   * `ready` asks the adapter rather than checking for a cookie: "the composer is
+   * there" is the only definition of signed-in that matters, and it is the same
+   * check the adapter makes before every turn.
+   */
+  private loginHooks(sessionId: string, record: SessionRecord): LoginHooks {
+    const tabFor = (index: number): string | undefined => this.tabs.get(sessionId)?.get(index);
+
+    return {
+      promote: async (index) => {
+        const tabId = tabFor(index);
+        if (tabId) await this.deps.controller.promoteTab(tabId);
+      },
+      ready: async (index) => {
+        const tabId = tabFor(index);
+        if (!tabId) return false;
+        const page = this.deps.controller.pageOf(tabId);
+        if (!page) return false;
+        if (looksLikeSignIn(page.url())) return false;
+
+        const provider = record.participants.find((p) => p.index === index)?.providers[0];
+        if (!provider) return false;
+        const adapter = await this.deps.adapters.get(provider);
+        return adapter.isReady(page);
+      },
+      sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    };
   }
 
   private buildDispatch(record: SessionRecord): Dispatch {

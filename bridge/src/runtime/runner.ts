@@ -20,6 +20,7 @@ import * as path from 'node:path';
 import type { Role, SessionState } from './stateMachine';
 import { isTerminal, transition } from './stateMachine';
 import { planContextDrops, Scheduler, type ContextMessage, type TurnToken } from './scheduler';
+import { LoginWait } from './login';
 import type { ParticipantSpec, SessionRecord } from './session';
 import { sessionDir, setSubState, writeRecord } from './session';
 import { exportBundle, type BundleResult, type BundleObjection } from './bundle';
@@ -59,6 +60,19 @@ export type Dispatch = (req: DispatchRequest) => Promise<DispatchResult>;
  * one; a test supplies a stub. Without this, `snapshotText` was always empty and
  * the auditor audited a plan with no code in front of it.
  */
+/**
+ * What a participant waiting for a human needs. Injected so the wait is testable
+ * without a browser, and so the runner never learns what a tab is.
+ */
+export interface LoginHooks {
+  /** Bring the participant's tab to the front. */
+  promote(participant: number): Promise<void>;
+  /** Is it signed in yet? */
+  ready(participant: number): Promise<boolean>;
+  /** Wait, injectable so a test does not spend five real minutes. */
+  sleep(ms: number): Promise<void>;
+}
+
 export interface SnapshotProvider {
   sliceFor(planText: string, role: Role): Promise<string>;
 }
@@ -84,7 +98,10 @@ export type RunnerEvent =
   | { type: 'context.truncated'; participant: number; bytes: number }
   | { type: 'question.asked'; id: string; round: number; participant: number }
   | { type: 'objection.resolved'; participant: number; round: number }
-  | { type: 'stall.check'; participant: number; similarity: number; runs: number };
+  | { type: 'stall.check'; participant: number; similarity: number; runs: number }
+  | { type: 'login.required'; participant: number }
+  | { type: 'login.succeeded'; participant: number; elapsedMs: number }
+  | { type: 'login.expired'; participant: number; ceilingMs: number };
 
 export interface RunnerDeps {
   /** Sessions root — the same directory session.ts writes to. */
@@ -92,6 +109,7 @@ export interface RunnerDeps {
   record: SessionRecord;
   dispatch: Dispatch;
   snapshot?: SnapshotProvider;
+  login?: LoginHooks;
   roundBudget?: number;
   /** Hard stop on the loop, so a scheduler bug cannot spin forever. */
   maxTurns?: number;
@@ -251,7 +269,21 @@ export class SessionRunner {
       try {
         result = await this.deps.dispatch({ ...base, retry });
       } catch (err) {
-        const why = `DISPATCH_FAILED: ${(err as Error).message}`;
+        const message = (err as Error).message;
+
+        // A sign-in page is not a broken selector and not a lost tab: someone has
+        // to type a password. Wait for them, then send the turn again.
+        if (/^EAUTH/.test(message) && this.deps.login) {
+          const signedIn = await this.waitForLogin(participant);
+          if (signedIn) {
+            attempt -= 1; // the same attempt, not a retry of a bad answer
+            continue;
+          }
+          this.degrade(participant, 'AUTH_BLOCKED');
+          return null;
+        }
+
+        const why = `DISPATCH_FAILED: ${message}`;
         this.emit({ type: 'degraded', participant: participant.index, reason: why });
         this.degrade(participant, why);
         return null;
@@ -367,6 +399,42 @@ export class SessionRunner {
       .filter((o) => !o.resolution)
       .map((o) => `obj-${o.round}-${o.participant}: ${o.body}`)
       .join('\n');
+  }
+
+  /**
+   * Promote the tab and poll until signed in or the ceiling passes.
+   *
+   * The session state only changes while initialising. Mid-debate, a session-level
+   * AWAITING_LOGIN would stall the other four participants for one person's
+   * password — so a re-auth is a participant-level wait with a reported event, and
+   * only expiry degrades it.
+   */
+  private async waitForLogin(participant: ParticipantSpec): Promise<boolean> {
+    const login = this.deps.login;
+    if (!login) return false;
+
+    const wait = new LoginWait({ now: this.now });
+    const initialising = this.state === 'INITIALIZING' || this.state === 'HANDSHAKE_PENDING';
+    if (initialising) {
+      this.apply({ type: 'login.required', participant: participant.index });
+    }
+    this.emit({ type: 'login.required', participant: participant.index });
+    await login.promote(participant.index);
+
+    while (!wait.expired()) {
+      await login.sleep(wait.nextDelayMs());
+      if (await login.ready(participant.index)) {
+        if (initialising) this.apply({ type: 'login.succeeded', participant: participant.index });
+        this.emit({ type: 'login.succeeded', participant: participant.index, elapsedMs: wait.elapsedMs() });
+        return true;
+      }
+    }
+
+    if (initialising) {
+      this.apply({ type: 'login.ceiling', participant: participant.index, role: participant.role as Role });
+    }
+    this.emit({ type: 'login.expired', participant: participant.index, ceilingMs: wait.ceilingMs() });
+    return false;
   }
 
   private degrade(participant: ParticipantSpec, why: string): void {
