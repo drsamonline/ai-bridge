@@ -158,6 +158,43 @@ that fails over globally. That is the trade the debate makes.
 
 ---
 
+## D9 — The attach premise is constrained by Chrome 136, and this decides the shell
+
+**Spec:** §1 says the engine drives "the tab you are already signed in to", and
+Option B drops the extension on the grounds that a page served over loopback is
+enough.
+
+**What changed outside our control:** from Chrome 136, `--remote-debugging-port` and
+`--remote-debugging-pipe` are ignored when Chrome would use the default user data
+directory. Chrome's stated reason is cookie theft — starting the user's own browser
+with a port and asking it for cookies over CDP became the cheap attack after
+App-Bound Encryption. A non-default directory gets a different encryption key, so a
+debugger attached to it cannot reach the everyday profile.
+
+**Decision:** launch mode is the supported path, and it already passes
+`--user-data-dir` (`cdp/launch.ts` documents this). The user signs in once inside
+that directory and it persists. Attach mode stays for the case where the user has
+started Chrome with both switches themselves.
+
+**Consequences, in order of how much they matter:**
+
+1. **A debugging profile starts signed out.** Copying the real profile into it does
+   not restore sessions — different key, by design. This is exactly the login flow
+   `AWAITING_LOGIN` was written for, so that batch is now load-bearing rather than
+   a nicety.
+2. **Option B's premise is weaker than the spec assumed.** "The tab you are already
+   signed in to" is not reachable over a port on the default profile. It is reachable
+   through `chrome.debugger` from an extension plus native messaging — which is
+   Option A, the architecture we deferred. That deferral deserves revisiting before
+   batch 11 builds a UI on top of it.
+3. **Two smaller traps:** a second launch on a profile Chrome already owns is a
+   no-op that silently drops the flags, and pointing `--user-data-dir` at the default
+   directory's own path is still the default directory.
+
+**Cost:** the setup story is worse than the spec implied — one sign-in, in a browser
+window that is not the one the user lives in. The alternative costs an extension, a
+native-messaging host and a per-OS installer.
+
 ## Still undecided
 
 - **Shared accounts.** Two participants may name the same provider, and therefore

@@ -27,9 +27,31 @@ before step 2.
 ## 1. Attach, do not launch
 
 ```bash
-google-chrome --remote-debugging-port=9222     # your normal profile, already signed in
+# BOTH switches. Chrome 136+ ignores --remote-debugging-port when it would use the
+# default profile — the browser opens, nothing listens, and the only symptom is a
+# refused connection.
+google-chrome --remote-debugging-port=9222 --user-data-dir="$HOME/chrome-debug"
 npm run bridge
 ```
+
+**Why this changed, and what it costs.** From Chrome 136 the two debugging switches
+are ignored on the default user data directory. The reason is cookie theft: after
+App-Bound Encryption, starting the user's own Chrome with a port and asking it for
+cookies over CDP became the cheap attack. A non-default directory uses a different
+encryption key, so a debugger attached to it cannot see your everyday profile.
+
+Two consequences that matter more than the flag:
+
+- **A debugging profile starts signed out.** Copying your real profile into it does
+  not restore the sessions — different key, by design. You sign in once inside
+  `$HOME/chrome-debug` and every later launch on that directory is signed in again.
+- **A second launch on a profile Chrome already owns is a no-op.** It hands the
+  command line to the running process, which drops the flags. Quit every window on
+  that directory first.
+
+The route that still reaches your real, everyday profile is `chrome.debugger` from
+an extension plus native messaging — no port, no second browser. That is the MV3
+architecture Option A described, and this is the strongest argument for it.
 
 The bridge binds a unix socket and prints `listening on …`. If it also prints a
 served-shell URL with a nonce, `AI_BRIDGE_TRANSPORT=tcp` is set — leave it unset

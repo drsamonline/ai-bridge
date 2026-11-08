@@ -104,8 +104,14 @@ export async function discover(ports: readonly number[], log: Logger): Promise<B
 export function noEndpointMessage(ports: readonly number[]): string {
   return (
     `ENOCDP: nothing listening on ${ports.map((p) => `127.0.0.1:${p}`).join(', ')}. ` +
-    'Start Chrome/Edge with --remote-debugging-port=9222 and stay logged in. ' +
-    'Start one yourself, or set aiBridge.browser.mode to "launch" and run ' +
-    'AI Bridge: Launch Browser.'
+    // Chrome 136 ignores --remote-debugging-port on the DEFAULT profile, so the
+    // old advice ("start Chrome with the flag and stay logged in") silently does
+    // nothing: the browser opens and no port listens. --user-data-dir is not
+    // optional any more, and a non-default directory starts signed out.
+    'Chrome 136+ ignores --remote-debugging-port on the default profile, so the ' +
+    'flag alone will not open a port. Either start Chrome with BOTH switches — ' +
+    '--remote-debugging-port=9222 --user-data-dir=<a folder of its own> — and sign ' +
+    'in there once, or set aiBridge.browser.mode to "launch" and run ' +
+    'AI Bridge: Launch Browser, which passes both.'
   );
 }
