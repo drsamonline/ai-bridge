@@ -23,6 +23,13 @@ import { planContextDrops, Scheduler, type ContextMessage, type TurnToken } from
 import type { ParticipantSpec, SessionRecord } from './session';
 import { sessionDir, setSubState, writeRecord } from './session';
 import { exportBundle, type BundleResult, type BundleObjection } from './bundle';
+import {
+  jaccard,
+  parseQuestionsBlock,
+  QuestionLedger,
+  STALL_RUNS,
+  STALL_THRESHOLD,
+} from './questions';
 import { escalationAccepted, extractFenced, parseToken, type SettleBy, type Token } from './token';
 
 export interface DispatchRequest {
@@ -63,7 +70,10 @@ export type RunnerEvent =
   | { type: 'resumed'; from: SessionState }
   | { type: 'bundle.written'; dir: string; artifacts: number }
   | { type: 'context.dropped'; participant: number; dropped: number; rotationIgnored: boolean }
-  | { type: 'context.truncated'; participant: number; bytes: number };
+  | { type: 'context.truncated'; participant: number; bytes: number }
+  | { type: 'question.asked'; id: string; round: number; participant: number }
+  | { type: 'objection.resolved'; participant: number; round: number }
+  | { type: 'stall.check'; participant: number; similarity: number; runs: number };
 
 export interface RunnerDeps {
   /** Sessions root — the same directory session.ts writes to. */
@@ -83,7 +93,7 @@ export interface RunResult {
   turns: number;
   rounds: number;
   planVersion: number;
-  objections: Array<{ participant: number; body: string; round: number }>;
+  objections: Array<{ participant: number; body: string; round: number; resolution?: string }>;
 }
 
 const RETRY_HINT = '\n\nREMINDER — end with exactly one token. No code. 500 words max.';
@@ -101,17 +111,24 @@ export class SessionRunner {
   private reason: string | null = null;
   private turns = 0;
   private planVersion: number;
-  private readonly objections: Array<{ participant: number; body: string; round: number }> = [];
+  private readonly objections: Array<{ participant: number; body: string; round: number; resolution?: string }> = [];
   private readonly transcript: Array<{ round: number; participant: number; token: string; text: string }> = [];
   private seq = 0;
   /** Participants whose message was dropped last turn, so the rotation can skip them. */
   private contextSkip: number[] = [];
+  /** §14: questions the auditor asked that only the user can answer. */
+  private readonly questions = new QuestionLedger();
+  /** §8: each participant's previous turn, and how many times running it repeated. */
+  private readonly lastTurnText = new Map<number, string>();
+  private readonly stallRuns = new Map<number, number>();
+  private readonly startedAt: number;
 
   constructor(deps: RunnerDeps) {
     this.deps = deps;
     this.record = deps.record;
     this.now = deps.now ?? (() => Date.now());
     this.state = deps.record.state === 'INITIALIZING' ? 'ACTIVE' : deps.record.state;
+    this.startedAt = this.now();
     this.planVersion = deps.record.planVersion ?? 0;
     this.scheduler = new Scheduler({
       participants: deps.record.participants.map((p) => ({ index: p.index, role: p.role, providers: p.providers })),
@@ -242,8 +259,66 @@ export class SessionRunner {
         this.writePlan(plan);
       }
 
+      // §14: the auditor's questions block is the only source. Prose questions in
+      // a reply body are ignored and logged, not turned into a gate.
+      if (participant.role === 'auditor') {
+        const block = extractFenced(result.text, 'questions');
+        if (block) {
+          for (const q of parseQuestionsBlock(block)) {
+            const entry = this.questions.add(round, participant.index, q.text, q.options);
+            this.emit({ type: 'question.asked', id: entry.id, round, participant: participant.index });
+          }
+        }
+      }
+
+      // §15: a planner turn may answer objections by id.
+      if (participant.role === 'planner') {
+        const block = extractFenced(result.text, 'resolutions');
+        if (block) this.applyResolutions(block);
+      }
+
+      // §8: a participant that repeats itself twice running has stopped moving.
+      this.noteStallRisk(participant.index, result.text);
+
       this.persistTurn(round, participant.index, token.kind, result.text);
       return token;
+    }
+    return null;
+  }
+
+  /**
+   * `obj-<round>-<participant>: text` lines from a planner resolutions block.
+   * An objection with no entry stays open, which is what the bundle reports.
+   */
+  private applyResolutions(block: string): void {
+    for (const line of block.split('\n')) {
+      const match = /^\s*obj-(\d+)-(\d+)\s*:\s*(.+)$/.exec(line);
+      if (!match) continue;
+      const round = Number(match[1]);
+      const participant = Number(match[2]);
+      const resolution = (match[3] ?? '').trim();
+      const objection = this.objections.find((o) => o.round === round && o.participant === participant);
+      if (!objection) continue;
+      objection.resolution = resolution;
+      this.emit({ type: 'objection.resolved', participant, round });
+    }
+  }
+
+  private noteStallRisk(participant: number, text: string): void {
+    const previous = this.lastTurnText.get(participant);
+    this.lastTurnText.set(participant, text);
+    if (previous === undefined) return;
+
+    const similarity = jaccard(previous, text);
+    const runs = similarity > STALL_THRESHOLD ? (this.stallRuns.get(participant) ?? 0) + 1 : 0;
+    this.stallRuns.set(participant, runs);
+    this.emit({ type: 'stall.check', participant, similarity, runs });
+  }
+
+  /** True once a participant has repeated itself enough to call the session stalled. */
+  private stalledParticipant(): number | null {
+    for (const [participant, runs] of this.stallRuns) {
+      if (runs >= STALL_RUNS) return participant;
     }
     return null;
   }
@@ -317,6 +392,24 @@ export class SessionRunner {
     while (this.turns < maxTurns) {
       if (this.halted()) break;
 
+      // §19: checked before each turn rather than by a timer, so the session
+      // cannot overrun while the runner sits between awaits.
+      const wallClock = this.deps.record.wallClockMs;
+      if (wallClock > 0 && this.now() - this.startedAt >= wallClock) {
+        this.apply({ type: 'wallclock.exhausted' });
+        this.emit({ type: 'halt', state: this.state, reason: this.reason });
+        break;
+      }
+
+      // §8: a participant that has repeated itself twice running has stopped
+      // moving, and more rounds will not help it.
+      const stalled = this.stalledParticipant();
+      if (stalled !== null) {
+        this.apply({ type: 'stall.detected', participant: stalled });
+        this.emit({ type: 'halt', state: this.state, reason: this.reason });
+        break;
+      }
+
       const next = this.scheduler.nextSpeaker();
       if (next === null) {
         this.finish();
@@ -360,6 +453,15 @@ export class SessionRunner {
         // Consensus is evaluated on the round that just finished, before anything
         // clears the tally.
         if (this.scheduler.consensusReached()) {
+          // §14 DECISION: an open question gates consensus. Unanimity on a plan
+          // whose open question nobody answered is not an agreement yet, so it
+          // becomes a question for the user rather than a stop.
+          if (this.questions.blocksConsensus()) {
+            const open = this.questions.open()[0];
+            this.apply({ type: 'ask.user', participant: open?.askedBy ?? 0 });
+            this.emit({ type: 'halt', state: this.state, reason: this.reason });
+            break;
+          }
           this.apply({ type: 'consensus.unanimous' });
           this.emit({ type: 'halt', state: this.state, reason: this.reason });
           break;
@@ -457,6 +559,7 @@ export class SessionRunner {
       record: this.record,
       planVersion: this.planVersion,
       objections: this.objections.map((o) => ({ ...o }) as BundleObjection),
+      questions: this.questions.all(),
       snapshot: snapshot ?? null,
       now: this.now(),
     });
@@ -473,6 +576,19 @@ export class SessionRunner {
     const ok = this.apply({ type: 'user.confirm.consensus' });
     if (ok) this.persistRecord();
     return ok;
+  }
+
+  /**
+   * ABORTED. The transcript and bundle stay for the retention window; the caller
+   * releases leases and closes the tabs, because those are browser operations and
+   * this module does not own a browser.
+   */
+  abort(reason = 'user aborted'): boolean {
+    const ok = this.apply({ type: 'user.abort' });
+    if (!ok) return false;
+    this.reason = reason;
+    this.persistRecord();
+    return true;
   }
 
   /** The user confirmed the build in Sarvam — the machine's last transition. */

@@ -324,10 +324,13 @@ function newSession(root, over = {}) {
       dispatch: async (req) => ({
         settledBy: 'sentinel',
         text: req.participant.role === 'planner'
-          ? plannerTurn('# p')
-          : req.participant.index === 1
+          ? plannerTurn(`# p${req.round}`)
+          // Escalates once, then replies normally: repeating the same escalation
+          // every round is exactly what the stall detector is for, and it caught
+          // this fixture when the detector landed.
+          : req.participant.index === 1 && req.round === 1
             ? 'Need one more round.\n[[ESCALATE: the migration has not been reviewed]]'
-            : 'ok\n[[REPLY]]',
+            : `round ${req.round} ok\n[[REPLY]]`,
       }),
       onEvent: (e) => events.push(e),
     });
@@ -390,6 +393,123 @@ function newSession(root, over = {}) {
     assert.deepEqual(over, [], 'no context block may exceed the 6 KB budget');
     assert.ok(events.some((e) => e.type === 'context.dropped'),
       'large turns must be dropped, and the drop reported');
+  });
+
+  /* ------------------------------------------------------- batch 2: the states */
+
+  await checkAsync('questions: an open question turns an agreement into a question', async () => {
+    const root = tempRoot();
+    const record = newSession(root, { roundBudget: 7 });
+    const runner = new SessionRunner({
+      root,
+      record,
+      dispatch: async (req) => {
+        if (req.participant.role === 'planner') return { settledBy: 'sentinel', text: plannerTurn('# p', '[[CONSENSUS]]') };
+        if (req.participant.role === 'auditor') {
+          // Agrees, and asks something only the user can answer.
+          return {
+            settledBy: 'sentinel',
+            text: 'Agreed, but one thing is unresolved.\n\n```questions\nWhich database? | postgres | sqlite\n```\n\n[[CONSENSUS]]',
+          };
+        }
+        return { settledBy: 'sentinel', text: 'ok\n[[CONSENSUS]]' };
+      },
+    });
+
+    const result = await runner.run();
+    assert.equal(result.state, 'NEEDS_USER', 'unanimity over an open question is not an agreement');
+
+    assert.equal(runner.confirmConsensus(), true);
+    const out = runner.confirmBundle();
+    assert.equal(out.bundle.manifest.questions.total, 1);
+    assert.equal(out.bundle.manifest.questions.open, 1);
+    assert.match(fs.readFileSync(path.join(out.bundle.dir, 'questions.md'), 'utf8'), /Which database/);
+  });
+
+  await checkAsync('resolutions: a planner turn can answer an objection by id', async () => {
+    const root = tempRoot();
+    const record = newSession(root, { roundBudget: 3 });
+    const runner = new SessionRunner({
+      root,
+      record,
+      dispatch: async (req) => {
+        if (req.participant.role === 'planner') {
+          const resolutions = req.round >= 2
+            ? '\n\n```resolutions\nobj-1-1: added a down migration and a rollback test\n```'
+            : '';
+          return { settledBy: 'sentinel', text: `${plannerTurn(`# p${req.round}`)}${resolutions}` };
+        }
+        if (req.participant.role === 'auditor' && req.round === 1) {
+          return { settledBy: 'sentinel', text: 'No rollback.\n[[OBJECTION: no down migration | high]]' };
+        }
+        return { settledBy: 'sentinel', text: 'ok\n[[REPLY]]' };
+      },
+    });
+
+    const result = await runner.run();
+    assert.equal(result.objections.length, 1);
+    assert.match(result.objections[0].resolution ?? '', /down migration/,
+      'the objection must be resolved by the planner resolutions block');
+  });
+
+  await checkAsync('stall: a participant repeating itself twice running halts as STALLED', async () => {
+    const root = tempRoot();
+    const record = newSession(root, { roundBudget: 7 });
+    const runner = new SessionRunner({
+      root,
+      record,
+      dispatch: async (req) => {
+        if (req.participant.role === 'planner') {
+          return { settledBy: 'sentinel', text: plannerTurn(`# plan for round ${req.round}`) };
+        }
+        if (req.participant.index === 2) {
+          // Byte-identical every round: a participant that has stopped moving.
+          return { settledBy: 'sentinel', text: 'I have nothing to add to this plan.\n[[REPLY]]' };
+        }
+        return { settledBy: 'sentinel', text: `round ${req.round} comment ${req.participant.index}\n[[REPLY]]` };
+      },
+    });
+
+    const result = await runner.run();
+    assert.equal(result.state, 'STALLED');
+  });
+
+  await checkAsync('wallclock: an exhausted clock halts with the last good plan', async () => {
+    const root = tempRoot();
+    const record = newSession(root, { roundBudget: 7, wallClockMs: 1000 });
+    let clock = 0;
+    const runner = new SessionRunner({
+      root,
+      record,
+      now: () => (clock += 10_000),
+      dispatch: async (req) => ({
+        settledBy: 'sentinel',
+        text: req.participant.role === 'planner' ? plannerTurn('# p') : 'ok\n[[REPLY]]',
+      }),
+    });
+
+    const result = await runner.run();
+    assert.equal(result.state, 'WALL_CLOCK');
+    assert.equal(result.reason, 'WALL_CLOCK');
+  });
+
+  await checkAsync('abort: the session reaches ABORTED and says so on disk', async () => {
+    const root = tempRoot();
+    const record = newSession(root, { roundBudget: 7 });
+    const runner = new SessionRunner({
+      root,
+      record,
+      maxTurns: 2,
+      dispatch: async (req) => ({
+        settledBy: 'sentinel',
+        text: req.participant.role === 'planner' ? plannerTurn('# p') : 'ok\n[[REPLY]]',
+      }),
+    });
+    await runner.run();
+    assert.equal(runner.abort('user changed their mind'), true);
+    const onDisk = JSON.parse(fs.readFileSync(path.join(sessionDir(root, record.id), 'session.json'), 'utf8'));
+    assert.equal(onDisk.state, 'ABORTED');
+    assert.equal(onDisk.reason, 'user changed their mind');
   });
 
   /* ------------------------------------------- the two blockers the audit found */

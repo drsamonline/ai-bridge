@@ -379,6 +379,23 @@ export function reconstruct(root: string, processStartedAt: number): SessionReco
 }
 
 /**
+ * Everything a starting bridge must do to the sessions directory: infer which
+ * sessions died with the last process, then collect the ones past retention.
+ *
+ * One call rather than two, because running them in the wrong order — GC before
+ * reconstruction — would collect a session that was about to be resumed.
+ */
+export function maintenance(
+  root: string,
+  now: number = Date.now(),
+  processStartedAt: number = now,
+): { suspended: string[]; collected: string[] } {
+  const suspended = reconstruct(root, processStartedAt).map((r) => r.id);
+  const collected = gc(root, now);
+  return { suspended, collected };
+}
+
+/**
  * Retention (§20): a finished session is kept seven days and then removed. Only
  * the local copy — the transcript that lives in five vendors' chat histories is
  * not ours to collect.

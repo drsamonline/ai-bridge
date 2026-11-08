@@ -293,6 +293,22 @@ check('session: one RAM cap, shared by validation and the ledger', () => {
   assert.equal(ramBudgetFor(roster()), DEFAULT_RAM_CAP_BYTES, 'and both fall back to the same default');
 });
 
+check('session: the startup sweep reconstructs before it collects', () => {
+  const { maintenance } = session;
+  const root = tempRoot();
+
+  const live = createSession(root, roster(), 1_000);          // died with the process
+  assert.equal(live.ok, true);
+  const finished = createSession(root, roster(), 1_000);       // finished long ago
+  assert.equal(finished.ok, true);
+  writeRecord(root, { ...finished.record, state: 'ABORTED', lastMutationAt: 1_000 });
+
+  const out = maintenance(root, 1_000 + 8 * 24 * 3600 * 1000, 2_000);
+  assert.deepEqual(out.suspended, [live.record.id], 'only the interrupted session is suspended');
+  assert.deepEqual(out.collected, [finished.record.id], 'and only the expired one is collected');
+  assert.ok(fs.existsSync(sessionDir(root, live.record.id)), 'a suspended session must survive the sweep');
+});
+
 check('session: the default cap is the session-configured one, not 500 MB', () => {
   assert.equal(DEFAULT_RAM_CAP_BYTES, 2000 * MB);
   assert.ok(ESTIMATED_TAB_BYTES > 0);
