@@ -131,6 +131,9 @@ export class Scheduler {
     if (this.phase === 'reservation') {
       const planner = this.participants.find((p) => p.role === 'planner');
       if (!planner) return null;
+      // Exactly one reserved turn. If the planner has already taken it the budget
+      // is spent — returning the planner again here is an infinite loop.
+      if (this.spoken.includes(planner.index)) return null;
       // A degraded planner is not dispatchable even for the reservation; the
       // caller turns that into PLANNER_DEGRADED rather than looping.
       return this.status(planner.index) === 'active' ? planner.index : null;
@@ -163,6 +166,11 @@ export class Scheduler {
     }
     if (token === 'CONSENSUS' && !this.consensus.includes(participant)) {
       this.consensus.push(participant);
+    }
+    // The reservation is a single planner turn, not a whole round: as soon as the
+    // planner has spoken under it, the budget is exhausted.
+    if (this.phase === 'reservation' && this.participants.find((p) => p.index === participant)?.role === 'planner') {
+      this.phase = 'exhausted';
     }
     this.history.push({ round: this.round, participant, token });
 
