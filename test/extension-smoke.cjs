@@ -428,8 +428,8 @@ async function main() {
   check('the debate view registers alongside the chat panel', () => {
     // Two views, one extension. The debate panel is the same HTML the bridge serves,
     // so its registration must not disturb the chat panel's.
-    assert.ok(registeredViews['aiBridge.chatView'], 'the chat view is not registered');
-    assert.ok(registeredViews['aiBridge.debateView'], 'the debate view is not registered');
+    if (!registeredViews['aiBridge.chatView']) throw new Error('the chat view is not registered');
+    if (!registeredViews['aiBridge.debateView']) throw new Error('the debate view is not registered');
   });
 
   check('status bar is visible', () => {
