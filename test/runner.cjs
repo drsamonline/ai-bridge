@@ -423,6 +423,36 @@ function newSession(root, over = {}) {
     assert.equal(debater.snapshot, '', 'a debater is sent no slice');
   });
 
+  await checkAsync('runner: the planner is given the objection ids it must answer', async () => {
+    const root = tempRoot();
+    const record = newSession(root, { roundBudget: 2 });
+    const seen = [];
+    const runner = new SessionRunner({
+      root,
+      record,
+      roundBudget: 2,
+      dispatch: async (req) => {
+        seen.push({ role: req.participant.role, round: req.round, objections: req.objectionsText });
+        if (req.participant.role === 'auditor' && req.round === 1) {
+          return { settledBy: 'sentinel', text: 'No rollback.\n[[OBJECTION: no down migration | high]]' };
+        }
+        return {
+          settledBy: 'sentinel',
+          text: req.participant.role === 'planner' ? plannerTurn(`# p${req.round}`) : `r${req.round}\n[[REPLY]]`,
+        };
+      },
+    });
+    await runner.run();
+
+    const plannerLater = seen.find((s) => s.role === 'planner' && s.round === 2);
+    assert.match(plannerLater.objections, /obj-1-1: no down migration/,
+      'the planner must be shown the id, or a resolutions block cannot match');
+    assert.ok(
+      seen.filter((s) => s.role === 'debater').every((s) => s.objections === ''),
+      'a debater is not given the objection list',
+    );
+  });
+
   /* ------------------------------------------------------- batch 2: the states */
 
   await checkAsync('questions: an open question turns an agreement into a question', async () => {

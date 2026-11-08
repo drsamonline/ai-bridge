@@ -35,6 +35,7 @@ const base = (over = {}) => ({
   contextText: '[round 1 | participant 1] an objection',
   questionsText: '- Which database?',
   snapshotText: '### src/ports.ts\nexport interface FsPort {}',
+  objectionsText: 'obj-1-1: no down migration',
   ...over,
 });
 
@@ -42,7 +43,7 @@ console.log('');
 
 check('payload: the blocks arrive in §7 order, fenced by name', () => {
   const p = buildPayload(base());
-  const order = ['```plan', '```context', '```questions', '```snapshot'];
+  const order = ['```plan', '```context', '```questions', '```objections', '```snapshot'];
   const positions = order.map((tag) => p.text.indexOf(tag));
   assert.ok(positions.every((n) => n >= 0), `missing a block: ${p.text}`);
   assert.deepEqual([...positions].sort((a, b) => a - b), positions, 'blocks are out of order');
@@ -128,7 +129,7 @@ check('payload: a retry says so, and says it where it will be read', () => {
 });
 
 check('payload: an empty turn is still a valid message', () => {
-  const p = buildPayload({ role: 'planner', planText: '', contextText: '', questionsText: '', snapshotText: '' });
+  const p = buildPayload({ role: 'planner', planText: '', contextText: '', questionsText: '', objectionsText: '', snapshotText: '' });
   assert.ok(p.text.includes(PROTOCOL_SUFFIX), 'a participant must still be told how to end its turn');
   assert.ok(p.bytes > 0);
 });

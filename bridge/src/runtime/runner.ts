@@ -41,6 +41,8 @@ export interface DispatchRequest {
   planText: string;
   contextText: string;
   questionsText: string;
+  /** Open objections with the ids a resolutions block must use. */
+  objectionsText: string;
   snapshotText: string;
 }
 
@@ -226,6 +228,7 @@ export class SessionRunner {
       planText,
       contextText: this.contextBlock(participant.index),
       questionsText: this.questions.open().map((q) => `- ${q.text}`).join('\n'),
+      objectionsText: this.objectionsBlock(participant.index),
       snapshotText,
     };
 
@@ -338,6 +341,22 @@ export class SessionRunner {
       if (runs >= STALL_RUNS) return participant;
     }
     return null;
+  }
+
+  /**
+   * The open objections, with the exact id a resolutions block must use.
+   *
+   * Only the planner is sent this: it is the only role that can answer one, and
+   * giving it to everyone would put a list of complaints in every debater's
+   * context and turn the debate into five people arguing about objections.
+   */
+  private objectionsBlock(participant: number): string {
+    const planner = this.record.participants.find((p) => p.role === 'planner');
+    if (!planner || planner.index !== participant) return '';
+    return this.objections
+      .filter((o) => !o.resolution)
+      .map((o) => `obj-${o.round}-${o.participant}: ${o.body}`)
+      .join('\n');
   }
 
   private degrade(participant: ParticipantSpec, why: string): void {

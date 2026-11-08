@@ -53,6 +53,7 @@ export function createLiveDispatch(deps: LiveDispatchDeps): Dispatch {
       planText: req.planText,
       contextText: req.contextText,
       questionsText: req.questionsText,
+      objectionsText: req.objectionsText,
       snapshotText: req.snapshotText,
       retry: req.retry,
     });

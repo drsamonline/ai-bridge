@@ -15,9 +15,9 @@ import type { Role } from './stateMachine';
 
 /** §7's per-item caps, in bytes. */
 export const PAYLOAD_CAPS = {
-  planner: { snapshot: 15 * 1024, plan: 6 * 1024, context: 6 * 1024, questions: 2 * 1024, suffix: 1024 },
-  auditor: { snapshot: 30 * 1024, plan: 6 * 1024, context: 2 * 1024, questions: 2 * 1024, suffix: 1024 },
-  debater: { snapshot: 0, plan: 6 * 1024, context: 6 * 1024, questions: 2 * 1024, suffix: 1024 },
+  planner: { snapshot: 15 * 1024, plan: 6 * 1024, context: 6 * 1024, questions: 2 * 1024, objections: 2 * 1024, suffix: 1024 },
+  auditor: { snapshot: 30 * 1024, plan: 6 * 1024, context: 2 * 1024, questions: 2 * 1024, objections: 2 * 1024, suffix: 1024 },
+  debater: { snapshot: 0, plan: 6 * 1024, context: 6 * 1024, questions: 2 * 1024, objections: 2 * 1024, suffix: 1024 },
 } as const;
 
 /** §7's role one-liners. Short on purpose: a reminder, not a second preamble. */
@@ -34,13 +34,21 @@ export interface PayloadInput {
   planText: string;
   contextText: string;
   questionsText: string;
+  /**
+   * Open objections, each prefixed with the id a resolutions block must use.
+   *
+   * The planner is the only participant that answers them, and without this it
+   * was asked to produce `obj-<round>-<participant>` keys it had never been shown
+   * — so resolutions could not match, and every objection shipped open.
+   */
+  objectionsText: string;
   snapshotText: string;
   /** True on the retry after an untrusted or missing token. */
   retry?: boolean;
 }
 
 export interface PayloadBlock {
-  name: 'plan' | 'context' | 'questions' | 'snapshot';
+  name: 'plan' | 'context' | 'questions' | 'objections' | 'snapshot';
   bytes: number;
   /** True when the block was cut to fit its cap. */
   truncated: boolean;
@@ -93,6 +101,7 @@ export function buildPayload(input: PayloadInput): Payload {
   push('plan', input.planText, caps.plan, 'plan');
   push('context', input.contextText, caps.context, 'context');
   push('questions', input.questionsText, caps.questions, 'questions');
+  push('objections', input.objectionsText, caps.objections, 'objections');
   push('snapshot', input.snapshotText, caps.snapshot, 'snapshot');
 
   const tail = [ROLE_LINE[input.role], PROTOCOL_SUFFIX];
