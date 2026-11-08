@@ -197,6 +197,12 @@ Step 4 is the first step allowed to change behaviour.
 3. **Add `stateMachine.ts` and `session.ts` with unit tests.** Wire them behind
    `wire()` but leave the debate path unused. New tests only, no existing test
    touched.
+   *Landed — `69d45a8`, plus `737b58a` for the harness fix it uncovered. Both
+   modules are written and tested (26 checks each) but not yet wired into
+   `wire()`; that is step 4. Three spec ambiguities were resolved inside
+   `stateMachine.ts` and marked DECISION rather than left to the call sites:
+   required-role loss goes to NEEDS_USER, the login ceiling aborts for a required
+   role, and a settle timeout degrades a debater but escalates a required one.*
 4. **Add `scheduler.ts` and switch the debate path onto it.** This is where the
    chain-walk is replaced by participant-boundary failover. Expect the existing
    provider failover tests to need a debate-specific sibling rather than an edit —
