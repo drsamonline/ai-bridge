@@ -262,8 +262,17 @@ matter when they are counted as independent agreement. So:
    one rate limit; free tiers throttle hard, and one participant tripping a limit can
    degrade the other mid-round. That is a warning, not a prohibition.
 
-**Not implemented yet:** point 2 changes what counts as consensus, so it needs a
-decision and a test, not just a patch.
+**Decided and implemented — report, do not block.** `consensusCorrelation()` in
+`scheduler.ts` reports whether every vote came from one provider, and the runner emits
+`consensus.correlated` when it did. It does **not** prevent consensus, and that is the
+practical call rather than a compromise: a user with one account would otherwise be
+unable to ever reach consensus, which turns a statistical caveat into a broken
+product. The bundle and the event stream now carry the caveat, so the claim is on the
+record where a reader can weigh it.
+
+If real sessions show correlated consensus producing bad plans, the next step is to
+require a second provider *when one is available* — the roster check makes that
+possible without touching a single-account user.
 
 ## D12 — The stall threshold is measuring the wrong thing
 
@@ -303,6 +312,14 @@ near-identical by nature.
 
 Only step 3 changes the constant; steps 1 and 2 change what the constant means. Doing
 3 alone would make the false positives worse.
+
+**Decided and implemented.** `jaccard` now compares word trigrams rather than word
+sets, replies under `STALL_MIN_CHARS` (120 normalised characters) are skipped entirely,
+and the threshold is 0.85. One consequence worth naming: the existing test that
+"a participant repeating itself twice running halts as STALLED" was repeating a
+39-character courtesy line — it was testing the false positive. It now repeats a long
+argument, and a new test pins the courtesy case as *not* a stall, because a terse
+participant is what drop rotation is for, not a reason to halt a debate.
 
 ## Sources
 

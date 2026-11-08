@@ -140,15 +140,40 @@ export function words(text: string): string[] {
 }
 
 /**
- * Jaccard similarity over the word sets, 0..1.
+ * Jaccard similarity over word **trigrams**, 0..1.
  *
- * Deterministic and local on purpose: an embedding would be neither, and the
- * point of the check is to catch a participant repeating itself, which is a
- * property of the text in front of us.
+ * Trigrams rather than word sets, and this is the change that matters (D12). A word
+ * set says "the same vocabulary", so a paraphrase scores high and a genuine repeat
+ * scores no higher. Trigrams say "the same phrases in the same order", which is what
+ * repetition actually looks like — and it is what every streaming loop detector
+ * compares.
+ *
+ * Deterministic and local on purpose: an embedding would be neither, and the point of
+ * the check is to catch a participant repeating itself, which is a property of the
+ * text in front of us.
  */
+/** Word trigrams of a reply, as a set. Falls back to the whole string when short. */
+export function trigrams(text: string): Set<string> {
+  const tokens = words(text);
+  const out = new Set<string>();
+  if (tokens.length < 3) {
+    if (tokens.length > 0) out.add(tokens.join(' '));
+    return out;
+  }
+  for (let i = 0; i <= tokens.length - 3; i += 1) {
+    out.add(`${tokens[i]} ${tokens[i + 1]} ${tokens[i + 2]}`);
+  }
+  return out;
+}
+
+/** Normalised length, for the floor that keeps short agreements out of the check. */
+export function normalisedLength(text: string): number {
+  return words(text).join(' ').length;
+}
+
 export function jaccard(a: string, b: string): number {
-  const setA = new Set(words(a));
-  const setB = new Set(words(b));
+  const setA = trigrams(a);
+  const setB = trigrams(b);
   if (setA.size === 0 && setB.size === 0) return 1;
   let intersection = 0;
   for (const word of setA) if (setB.has(word)) intersection += 1;
@@ -156,7 +181,25 @@ export function jaccard(a: string, b: string): number {
   return union === 0 ? 1 : intersection / union;
 }
 
-export const STALL_THRESHOLD = 0.95;
+/**
+ * Below this many characters a reply is not evidence of anything.
+ *
+ * The old check could fire on "No objection to this revision" said twice — two
+ * near-identical strings and no stalling at all. Short agreement text is
+ * near-identical by nature, which is why streaming detectors ignore short segments
+ * entirely rather than tuning a threshold around them.
+ */
+export const STALL_MIN_CHARS = 120;
+
+/**
+ * 0.85 over trigrams, not 0.95 over word sets.
+ *
+ * The convention for near-duplicate comparison is 0.8–0.85, and it is only meaningful
+ * once the comparison is positional. Raising it back to 0.95 over trigrams would mean
+ * a repeat has to be almost verbatim, which misses the reshuffled-paragraph case this
+ * exists to catch.
+ */
+export const STALL_THRESHOLD = 0.85;
 /**
  * §8 says "two consecutive per side" in the older drafts; with a roster rather
  * than two camps, the honest reading is two consecutive turns by the *same*

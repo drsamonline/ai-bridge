@@ -19,7 +19,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { Role, SessionState } from './stateMachine';
 import { isTerminal, transition } from './stateMachine';
-import { planContextDrops, Scheduler, type ContextMessage, type TurnToken } from './scheduler';
+import { consensusCorrelation, planContextDrops, Scheduler, type ContextMessage, type TurnToken } from './scheduler';
 import { LoginWait } from './login';
 import type { ParticipantSpec, SessionRecord } from './session';
 import { sessionDir, setSubState, writeRecord } from './session';
@@ -28,6 +28,8 @@ import {
   jaccard,
   parseQuestionsBlock,
   QuestionLedger,
+  normalisedLength,
+  STALL_MIN_CHARS,
   STALL_RUNS,
   STALL_THRESHOLD,
 } from './questions';
@@ -101,7 +103,8 @@ export type RunnerEvent =
   | { type: 'stall.check'; participant: number; similarity: number; runs: number }
   | { type: 'login.required'; participant: number }
   | { type: 'login.succeeded'; participant: number; elapsedMs: number }
-  | { type: 'login.expired'; participant: number; ceilingMs: number };
+  | { type: 'login.expired'; participant: number; ceilingMs: number }
+  | { type: 'consensus.correlated'; providers: string[]; participants: number[] };
 
 export interface RunnerDeps {
   /** Sessions root — the same directory session.ts writes to. */
@@ -382,6 +385,13 @@ export class SessionRunner {
     this.lastTurnText.set(participant, text);
     if (previous === undefined) return;
 
+    // A short reply cannot be evidence of stalling: "no objection" said twice is two
+    // near-identical strings and a participant that is doing exactly its job.
+    if (normalisedLength(text) < STALL_MIN_CHARS || normalisedLength(previous) < STALL_MIN_CHARS) {
+      this.stallRuns.set(participant, 0);
+      return;
+    }
+
     const similarity = jaccard(previous, text);
     const runs = similarity > STALL_THRESHOLD ? (this.stallRuns.get(participant) ?? 0) + 1 : 0;
     this.stallRuns.set(participant, runs);
@@ -639,6 +649,23 @@ export class SessionRunner {
             this.apply({ type: 'ask.user', participant: open?.askedBy ?? 0 });
             this.emit({ type: 'halt', state: this.state, reason: this.reason });
             break;
+          }
+          // D11: report correlated agreement, never block it. One provider behind
+          // every vote is one opinion sampled several times, and the bundle should
+          // say so — but a single-account user has no alternative, so this is a
+          // warning on the record rather than a gate on the session.
+          {
+            const correlation = consensusCorrelation(
+              this.scheduler.consensusIds(),
+              this.deps.record.participants,
+            );
+            if (correlation.correlated) {
+              this.emit({
+                type: 'consensus.correlated',
+                providers: correlation.providers,
+                participants: this.scheduler.consensusIds(),
+              });
+            }
           }
           this.apply({ type: 'consensus.unanimous' });
           this.emit({ type: 'halt', state: this.state, reason: this.reason });

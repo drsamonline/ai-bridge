@@ -76,6 +76,34 @@ export interface SchedulerSnapshot {
 
 const DEFAULT_STATUS: ParticipantStatus = 'active';
 
+/**
+ * How independent a consensus actually is (D11).
+ *
+ * Same-model agents do not give independent opinions — measured error correlation
+ * between homogeneous agents runs 0.86 to 0.93 — so agreement from one provider is one
+ * opinion sampled several times. This reports that rather than preventing it: a user
+ * with one account cannot do better, and blocking them would make consensus
+ * unreachable.
+ *
+ * The nominal provider is the participant's first, because that is the one it is
+ * expected to use. A fallback hop means the report is approximate, which is why it is
+ * a report and not a gate.
+ */
+export function consensusCorrelation(
+  consensus: readonly ParticipantId[],
+  participants: readonly { index: number; providers: readonly string[] }[],
+): { providers: string[]; correlated: boolean } {
+  const providers = new Set<string>();
+  for (const id of consensus) {
+    const participant = participants.find((p) => p.index === id);
+    for (const provider of participant?.providers ?? []) providers.add(provider);
+  }
+  return {
+    providers: [...providers],
+    correlated: consensus.length >= 2 && providers.size === 1,
+  };
+}
+
 export class Scheduler {
   private readonly participants: SchedulerParticipant[];
   private readonly escalateCap: number;
@@ -288,6 +316,11 @@ export class Scheduler {
    * are not in `active()`. The floor is what stops a roster reduced to one from
    * declaring "unanimous" on a single vote.
    */
+  /** Who has claimed consensus in the round just finished. */
+  consensusIds(): ParticipantId[] {
+    return [...this.consensus];
+  }
+
   consensusReached(): boolean {
     const active = this.active();
     return quorumReached(active.length, this.consensus.length) && active.every((p) => this.consensus.includes(p));

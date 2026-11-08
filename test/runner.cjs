@@ -490,6 +490,43 @@ function newSession(root, over = {}) {
     );
   });
 
+  /* ------------------------------------------- D11/D12: the researched decisions */
+
+  check('stall: a short agreement said twice is not a stall', () => {
+    const { normalisedLength, STALL_MIN_CHARS } = require('../bridge/dist/runtime/questions.js');
+    const short = 'No objection to this revision. The plan looks right to me.';
+    assert.ok(normalisedLength(short) < STALL_MIN_CHARS, 'the floor must exclude this');
+  });
+
+  check('stall: trigrams tell a paraphrase from a repeat', () => {
+    const { jaccard } = require('../bridge/dist/runtime/questions.js');
+    const a = 'the migration must be reversible because the deploy can fail halfway through the rollback window';
+    const repeat = a;
+    const paraphrase = 'because a deploy can fail halfway through the rollback window the migration must be reversible';
+    assert.ok(jaccard(a, repeat) === 1, 'an exact repeat is 1');
+    // Same vocabulary, different order — the case a word-set comparison got wrong.
+    assert.ok(jaccard(a, paraphrase) < 0.85, `a paraphrase scored ${jaccard(a, paraphrase)}`);
+  });
+
+  check('consensus: agreement from one provider is reported as correlated', () => {
+    const { consensusCorrelation } = require('../bridge/dist/runtime/scheduler.js');
+    const participants = [
+      { index: 0, providers: ['claude'] },
+      { index: 1, providers: ['claude'] },
+      { index: 2, providers: ['chatgpt'] },
+    ];
+    const same = consensusCorrelation([0, 1], participants);
+    assert.equal(same.correlated, true, 'two claude votes are one opinion sampled twice');
+    assert.deepEqual(same.providers, ['claude']);
+
+    const mixed = consensusCorrelation([0, 2], participants);
+    assert.equal(mixed.correlated, false, 'two providers is real agreement');
+    assert.equal(mixed.providers.length, 2);
+
+    // A single voter is never "correlated agreement" — it is just one vote.
+    assert.equal(consensusCorrelation([0], participants).correlated, false);
+  });
+
   /* --------------------------------------------- batch 13: the delta transport */
 
   await checkAsync('delta: a participant is not re-sent messages it has already read', async () => {
@@ -741,8 +778,16 @@ function newSession(root, over = {}) {
           return { settledBy: 'sentinel', text: plannerTurn(`# plan for round ${req.round}`) };
         }
         if (req.participant.index === 2) {
-          // Byte-identical every round: a participant that has stopped moving.
-          return { settledBy: 'sentinel', text: 'I have nothing to add to this plan.\n[[REPLY]]' };
+          // Byte-identical every round, and long enough to count: a participant that
+          // has stopped moving rather than one that simply has nothing to add. The
+          // short version of this is a false positive, pinned by the check below.
+          return {
+            settledBy: 'sentinel',
+            text:
+              'The migration ordering is wrong because the down migration runs before the index drop, ' +
+              'which leaves the foreign key dangling in any partially applied rollback and makes the ' +
+              'deploy unrecoverable without a manual fix.\n[[REPLY]]',
+          };
         }
         return { settledBy: 'sentinel', text: `round ${req.round} comment ${req.participant.index}\n[[REPLY]]` };
       },
@@ -750,6 +795,31 @@ function newSession(root, over = {}) {
 
     const result = await runner.run();
     assert.equal(result.state, 'STALLED');
+  });
+
+  await checkAsync('stall: a participant with nothing to add does not halt the session', async () => {
+    // The false positive D12 removed: a short, identical courtesy reply every round.
+    // Halted as STALLED before, which stopped a debate over one participant being
+    // terse — the scheduler already has drop rotation for that.
+    const root = tempRoot();
+    const record = newSession(root, { roundBudget: 3 });
+    const runner = new SessionRunner({
+      root,
+      record,
+      roundBudget: 3,
+      dispatch: async (req) => {
+        if (req.participant.role === 'planner') {
+          return { settledBy: 'sentinel', text: plannerTurn(`# plan for round ${req.round}`) };
+        }
+        if (req.participant.index === 2) {
+          return { settledBy: 'sentinel', text: 'I have nothing to add to this plan.\n[[REPLY]]' };
+        }
+        return { settledBy: 'sentinel', text: `round ${req.round} comment ${req.participant.index}\n[[REPLY]]` };
+      },
+    });
+
+    const result = await runner.run();
+    assert.notEqual(result.state, 'STALLED', 'a terse participant must not halt the debate');
   });
 
   await checkAsync('wallclock: an exhausted clock halts with the last good plan', async () => {
