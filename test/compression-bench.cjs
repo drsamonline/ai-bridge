@@ -18,9 +18,9 @@ const { compressT0, savedPercent } = require('../extension/dist/compress/t0.js')
 const { countTokens } = require('../extension/dist/text/tokens.js');
 const { buildBoot } = require('../extension/dist/state/boot.js');
 const schema = require('../extension/dist/state/schema.js');
-const { RepoReader } = require('../extension/dist/repo/reader.js');
+const { RepoReader } = require('../shared/dist/repo/reader.js');
 
-const { contextWorthIt } = require('../extension/dist/repo/relevance.js');
+const { contextWorthIt } = require('../shared/dist/repo/relevance.js');
 
 const CASES = [
   {

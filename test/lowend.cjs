@@ -22,7 +22,7 @@ const ROOT = path.resolve(__dirname, '..');
 const shared = require('../shared/dist/index.js');
 const lowEnd = require('../extension/dist/lowEnd.js');
 const { buildBoot } = require('../extension/dist/state/boot.js');
-const { RepoReader } = require('../extension/dist/repo/reader.js');
+const { RepoReader } = require('../shared/dist/repo/reader.js');
 const schema = require('../extension/dist/state/schema.js');
 
 const CHROME = process.env.CHROME_BIN || '/usr/local/bin/chromium';

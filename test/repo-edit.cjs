@@ -2,7 +2,7 @@
 /**
  * Batch 1.2 acceptance harness — RepoReader + EditApplier.
  *
- * Runs the real core (extension/dist/repo/*) against a real temp repo through a
+ * Runs the real core (shared/dist/repo/*) against a real temp repo through a
  * `node:fs` FsPort. No VS Code, no browser, no model: the applier's guarantees
  * are checked against bytes on disk.
  *
@@ -20,10 +20,10 @@ const os = require('node:os');
 const path = require('node:path');
 
 const ROOT = path.resolve(__dirname, '..');
-const { RepoReader, queryTerms, extractSignatures } = require('../extension/dist/repo/reader.js');
+const { RepoReader, queryTerms, extractSignatures } = require('../shared/dist/repo/reader.js');
 const { EditApplier, sha, lineDelta } = require('../extension/dist/repo/applier.js');
 const { parseProposal, summarise } = require('../extension/dist/repo/proposal.js');
-const { isEditablePath } = require('../extension/dist/repo/ports.js');
+const { isEditablePath } = require('../shared/dist/repo/ports.js');
 
 const results = [];
 let failures = 0;
@@ -540,7 +540,7 @@ async function main() {
 
   /* ------------------------------------- 8b. context relevance gate */
   {
-    const { contextWorthIt } = require('../extension/dist/repo/relevance.js');
+    const { contextWorthIt } = require('../shared/dist/repo/relevance.js');
     const cases = [
       ['tell me about foxes', false],
       ['what is a process vs a thread', false],
