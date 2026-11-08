@@ -24,7 +24,10 @@ const { spawn } = require('node:child_process');
 
 const ROOT = path.join(__dirname, '..');
 const CHROME = process.env.CHROME_BIN || '/usr/local/bin/chromium';
-const CDP_PORT = 9222;
+// 9233, not 9222: cdp-attach and chatgpt-fixture both drive 9222, and a browser that
+// has not finished releasing the port makes the *next* suite fail with "bridge
+// launched no browser of its own" — a message that sends you looking at the wrong test.
+const CDP_PORT = 9233;
 const FIXTURE_PORT = 47806;
 
 const results = [];
@@ -216,6 +219,11 @@ function request(over = {}) {
     chrome.kill('SIGKILL');
     const exited = new Promise((r) => (chrome.exitCode !== null ? r() : chrome.once('exit', r)));
     await Promise.race([exited, sleep(5000)]);
+    // Wait for the port itself, not just the process: exit and release are not the
+    // same moment, and the gap is where the next suite falls over.
+    await waitFor(async () => (await cdpVersion(CDP_PORT)) === null, 10000, 'CDP port to be released').catch(
+      () => console.log('warning: port 9233 was still answering after teardown'),
+    );
     fixture.close();
     fs.rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
     fs.rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
