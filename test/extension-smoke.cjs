@@ -45,6 +45,7 @@ let settingsPanelHtml = '';
 let lastDocContent = '';
 let panelProvider = null;
 let panelReceive = null;
+const registeredViews = {};
 const checks = [];
 let failures = 0;
 
@@ -200,6 +201,12 @@ const vscodeStub = {
       return Promise.resolve(undefined);
     },
     registerWebviewViewProvider(id, provider) {
+      // Real VS Code keeps every view; this stub drives exactly one. Registering the
+      // others must not displace the chat panel, so only the chat view is resolved
+      // here and the rest are accepted and ignored.
+      registeredViews[id] = provider;
+      if (id !== 'aiBridge.chatView') return { dispose() {} };
+
       panelProvider = provider;
       const view = {
         visible: true,
@@ -418,6 +425,13 @@ async function main() {
     });
     if (!/tab 2s/.test(rendered)) throw new Error(`got: ${rendered}`);
   });
+  check('the debate view registers alongside the chat panel', () => {
+    // Two views, one extension. The debate panel is the same HTML the bridge serves,
+    // so its registration must not disturb the chat panel's.
+    assert.ok(registeredViews['aiBridge.chatView'], 'the chat view is not registered');
+    assert.ok(registeredViews['aiBridge.debateView'], 'the debate view is not registered');
+  });
+
   check('status bar is visible', () => {
     if (!statusBar.visible) throw new Error('status bar hidden');
   });
