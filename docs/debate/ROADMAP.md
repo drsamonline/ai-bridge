@@ -34,6 +34,10 @@ lies about what the auditor saw.
 
 ## Batch 2 — the unreachable states
 
+**Done — `00b2b9c`.** All four landed. The runner now reaches 19 of the machine's
+35 events; `AWAITING_LOGIN` and `ABORTED`-via-login remain for batch 5, and the
+rest are gates the user drives rather than the loop.
+
 Four pure-logic items, no browser. The state machine already has every transition;
 the runner raises 14 of 35 events. This batch closes the gap between what the
 machine models and what the loop can reach.
