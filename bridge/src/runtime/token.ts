@@ -39,8 +39,10 @@ export interface ParseResult {
   multiple: boolean;
 }
 
-const ANCHORED =
-  /^\[\[(READY|REPLY|CONSENSUS|ASK_USER(?::\s*(.*))?|ESCALATE(?::\s*(.*))?|OBJECTION(?::\s*(.*))?)\]\]$/;
+// Group 1 is the kind on its own and group 2 is the payload. Folding the payload
+// into the alternatives made group 1 return "ASK_USER: …" instead of "ASK_USER",
+// which every `token.kind === 'ASK_USER'` check then failed to match.
+const ANCHORED = /^\[\[(READY|REPLY|CONSENSUS|ASK_USER|ESCALATE|OBJECTION)(?::\s*(.*))?\]\]$/;
 
 /**
  * Split the text into the token line and whether it was inside a fence.
@@ -98,8 +100,8 @@ export function parseToken(text: string, settledBy: SettleBy = 'sentinel'): Pars
   // one", which is worth knowing when a response goes wrong.
   const multiple = candidates.filter((line) => ANCHORED.test(line)).length > 1;
 
-  const [, kind, askBody, escalateBody, objectionBody] = match;
-  const body = askBody ?? escalateBody ?? objectionBody ?? '';
+  const [, kind, payload] = match;
+  const body = payload ?? '';
 
   if (settledBy === 'debounce') {
     // Parse anyway so the caller can log what it saw, but do not trust it.
