@@ -490,6 +490,93 @@ function newSession(root, over = {}) {
     );
   });
 
+  /* --------------------------------------------- batch 13: the delta transport */
+
+  await checkAsync('delta: a participant is not re-sent messages it has already read', async () => {
+    const root = tempRoot();
+    const record = newSession(root, { roundBudget: 3 });
+    const seen = [];
+    const runner = new SessionRunner({
+      root,
+      record,
+      roundBudget: 3,
+      dispatch: async (req) => {
+        seen.push({ p: req.participant.index, round: req.round, context: req.contextText, plan: req.planText });
+        return {
+          settledBy: 'sentinel',
+          text: req.participant.role === 'planner'
+            ? plannerTurn(`# p${req.round} PLANNER-${req.round}`)
+            : `MARK-${req.round}-by-${req.participant.index}\n[[REPLY]]`,
+        };
+      },
+    });
+    await runner.run();
+
+    const auditor = seen.filter((s) => s.p === 1);
+    assert.ok(auditor.length >= 2, 'the auditor must have had at least two turns');
+
+    // Its second turn must not repeat what it already read. Turns that arrived
+    // after its own are new to it and must still be sent — the delta is per
+    // participant, not per round.
+    const second = auditor[1];
+    assert.ok(!second.context.includes('PLANNER-1'), 'the planner turn it already read was re-sent');
+    assert.ok(second.context.includes('MARK-1-by-2'), 'but turns it had not yet seen must arrive');
+    assert.ok(second.context.includes('PLANNER-2'), 'and so must the new planner turn');
+  });
+
+  await checkAsync('delta: a retried turn carries the change, not the plan again', async () => {
+    const root = tempRoot();
+    const record = newSession(root, { roundBudget: 2 });
+    const seen = [];
+    const runner = new SessionRunner({
+      root,
+      record,
+      roundBudget: 2,
+      dispatch: async (req) => {
+        seen.push({ p: req.participant.index, role: req.participant.role, round: req.round, plan: req.planText });
+        if (req.participant.index === 2 && !req.retry) {
+          // First attempt: no token at all, so the runner retries.
+          return { settledBy: 'sentinel', text: 'nothing useful' };
+        }
+        return {
+          settledBy: 'sentinel',
+          text: req.participant.role === 'planner' ? plannerTurn(`# p${req.round}`) : `ok ${req.round}\n[[REPLY]]`,
+        };
+      },
+    });
+    await runner.run();
+
+    // The plan changes every round, so the only turn that can see an unchanged one
+    // is a retry — and a retry is exactly where re-sending everything hurts.
+    const one = seen.filter((s) => s.role === 'debater' && s.p === 2);
+    assert.ok(one.length >= 2, `expected a retry by participant 2, got ${one.length}`);
+    assert.match(one[0].plan, /# p/, 'the first attempt must carry the plan');
+    assert.match(one[1].plan, /unchanged/, 'the retry must be told the plan has not moved');
+    assert.ok(!one[1].plan.includes('# p'), 'and must not re-send the body');
+  });
+
+  await checkAsync('delta: the planner always receives the plan it is revising', async () => {
+    const root = tempRoot();
+    const record = newSession(root, { roundBudget: 2 });
+    const plans = [];
+    const runner = new SessionRunner({
+      root,
+      record,
+      roundBudget: 2,
+      dispatch: async (req) => {
+        if (req.participant.role === 'planner') plans.push(req.planText);
+        return {
+          settledBy: 'sentinel',
+          text: req.participant.role === 'planner' ? plannerTurn(`# p${req.round}`) : `ok ${req.round}\n[[REPLY]]`,
+        };
+      },
+    });
+    await runner.run();
+
+    assert.ok(plans.length >= 2, 'the planner must have had several turns');
+    assert.match(plans[1], /# p/, 'a planner must never be told the plan is unchanged');
+  });
+
   /* ------------------------------------------------------ batch 9: sign-in */
 
   check('login: the backoff is 3s, then x1.5 to a 15s cap', () => {

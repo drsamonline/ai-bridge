@@ -156,6 +156,13 @@ export class SessionRunner {
   private seq = 0;
   /** Participants whose message was dropped last turn, so the rotation can skip them. */
   private contextSkip: number[] = [];
+  /**
+   * §7 delta transport. What each participant has already been sent, so a turn
+   * carries the change rather than the whole history: the plan only when its version
+   * moved, and only the messages that arrived since their last turn.
+   */
+  private readonly planSeen = new Map<number, number>();
+  private readonly contextSeen = new Map<number, number>();
   /** §14: questions the auditor asked that only the user can answer. */
   private readonly questions = new QuestionLedger();
   /** §8: each participant's previous turn, and how many times running it repeated. */
@@ -242,19 +249,23 @@ export class SessionRunner {
   /* ------------------------------------------------------------------ turns */
 
   private async playTurn(participant: ParticipantSpec, round: number): Promise<Token | null> {
-    const planText = this.currentPlan();
+    // The context block is built once per turn: it advances the watermark, so
+    // building it twice would mark messages seen and then send nothing.
+    const contextText = this.contextBlock(participant.index);
     // The slice is built once per turn: the plan is what it ranks against, and the
     // plan does not change inside a turn.
     const snapshotText = this.deps.snapshot
-      ? await this.deps.snapshot.sliceFor(planText, participant.role)
+      ? await this.deps.snapshot.sliceFor(this.currentPlan(), participant.role)
       : '';
 
     const base: Omit<DispatchRequest, 'retry'> = {
       sessionId: this.deps.record.id,
       participant,
       round,
-      planText,
-      contextText: this.contextBlock(participant.index),
+      // Recomputed per attempt on purpose: a retry should carry the change, not the
+      // whole plan it was already given. Filled in at dispatch time.
+      planText: '',
+      contextText,
       questionsText: this.questions.open().map((q) => `- ${q.text}`).join('\n'),
       objectionsText: this.objectionsBlock(participant.index),
       snapshotText,
@@ -267,7 +278,7 @@ export class SessionRunner {
 
       let result: DispatchResult;
       try {
-        result = await this.deps.dispatch({ ...base, retry });
+        result = await this.deps.dispatch({ ...base, planText: this.planFor(participant), retry });
       } catch (err) {
         const message = (err as Error).message;
 
@@ -444,6 +455,25 @@ export class SessionRunner {
     if (result.roundCompleted) this.emit({ type: 'round.complete', round: this.scheduler.snapshot().round - 1 });
   }
 
+  /**
+   * The plan as this participant should receive it.
+   *
+   * The planner always gets the full text — it is the one revising it, and a note
+   * saying "unchanged" would leave it nothing to edit. Everyone else gets the plan
+   * when its version moved, and a one-line marker when it did not.
+   */
+  private planFor(participant: ParticipantSpec): string {
+    const full = this.currentPlan();
+    if (participant.role === 'planner' || this.planVersion === 0) return full;
+
+    const seen = this.planSeen.get(participant.index) ?? 0;
+    if (seen === this.planVersion) {
+      return `(plan unchanged since you last read it — still v${this.planVersion})`;
+    }
+    this.planSeen.set(participant.index, this.planVersion);
+    return full;
+  }
+
   private currentPlan(): string {
     if (this.planVersion === 0) return '';
     const file = path.join(sessionDir(this.deps.root, this.deps.record.id), 'plans', `plan-v${this.planVersion}.md`);
@@ -463,7 +493,17 @@ export class SessionRunner {
    * between turns and reports what it had to do.
    */
   private contextBlock(participant: number): string {
-    const recent = this.transcript.filter((t) => t.participant !== participant).slice(-12);
+    // Delta: only what arrived since this participant last spoke. Without the
+    // watermark every turn re-sends the same twelve messages, which is where the
+    // per-thread token count came from.
+    const from = this.contextSeen.get(participant) ?? 0;
+    const unseen = this.transcript
+      .map((t, i) => ({ t, seq: i + 1 }))
+      .filter(({ t, seq }) => t.participant !== participant && seq > from)
+      .map(({ t }) => t);
+    this.contextSeen.set(participant, this.transcript.length);
+
+    const recent = unseen.slice(-12);
     const messages: ContextMessage[] = recent.map((t, i) => ({
       participant: t.participant,
       round: t.round,
