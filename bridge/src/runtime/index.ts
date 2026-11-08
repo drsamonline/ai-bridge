@@ -22,6 +22,8 @@ import { CdpController } from '../cdp/controller';
 import * as path from 'node:path';
 import { Relay, type SwitchRecord } from './relay';
 import { SessionManager } from './sessions';
+import { createLiveDispatch } from './liveDispatch';
+import type { Dispatch } from './runner';
 import { candidateBrowsers, detectBrowserPath, launchBrowser } from '../cdp/launch';
 import { detectLocalModels } from '../api/local';
 import { DEFAULT_PORTS } from '../cdp/discovery';
@@ -196,6 +198,9 @@ export class BridgeRuntime {
       adapters: this.adapters,
       relay: this.relay,
       log: log.child('session'),
+      // One construction site for the live dispatch, so the session manager and
+      // anything else that needs it cannot drift apart.
+      makeDispatch: (_record, pageFor) => this.createDispatch({ pageFor }),
     });
 
     this.wire();
@@ -538,6 +543,21 @@ export class BridgeRuntime {
   }
 
   /** Dispatch a `ctl.*` message. Every branch returns a JSON-able payload. */
+  /**
+   * The live dispatch, over this runtime's own relay, adapters and controller.
+   *
+   * `pageFor` defaults to the active page, which is what a single-participant run
+   * wants; a debate supplies its own mapping from participant to leased tab.
+   */
+  createDispatch(opts: { pageFor?: (participant: number) => Page | null } = {}): Dispatch {
+    return createLiveDispatch({
+      relay: this.relay,
+      adapters: this.adapters,
+      pageFor: opts.pageFor ?? (() => this.controller.activePage),
+      log: this.opts.log.child('dispatch'),
+    });
+  }
+
   async control(msg: ControlMsg): Promise<unknown> {
     const log = this.opts.log;
     switch (msg.op) {

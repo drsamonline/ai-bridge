@@ -130,7 +130,7 @@ premise — a served page is enough — is weaker than the spec assumed.
 | **7** | Windows CI — it was `repo-edit`'s `readAll`, not the applier | S-M | **Done**, Windows job pending |
 | **8** | Fair context sharing | S | **Done** |
 | **9** | `AWAITING_LOGIN` promotion to a visible tab | M | **Done.** `promoteTab` on the controller, the 3s→15s→5min wait as a pure schedule, EAUTH raised by the dispatch, and the participant degraded on expiry rather than the session |
-| **10** | `liveDispatch` integration test against the fixture page | M | After 9. The last module no fake has touched; the fixture harness already drives real Chromium |
+| **10** | `liveDispatch` integration test against the fixture page | M | **Done.** Real Chromium, real DOM, real CDP: the whole §7 payload read back out of the composer, a settle from the page rather than the debounce fallback, and the two refusal paths |
 | **11** | Delta transport (§7) | M-L | Per-thread tokens grow unbounded across forced rounds |
 | **12** | The debate UI | L | **Gated on a decision, not on work:** Option A or B, see below |
 
