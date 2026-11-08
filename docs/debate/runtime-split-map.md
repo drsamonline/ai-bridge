@@ -224,7 +224,12 @@ Step 4 is the first step allowed to change behaviour.
    cannot read a disk. `relevance.ts` stayed a gate and the ranker
    (`bridge/src/repo/slice.ts`) was built on top of it, so a plan that mentions
    nothing in the codebase still costs zero tokens.*
-6. **Harden `server.ts`** per v6 §13. Independent of everything above.
+6. **Add `runtime/runner.ts` and `runtime/token.ts`.** Not in this map when it was
+   written; it is the loop that assembles the other four. *Landed — `3751fbf` and
+   `2bbf9ae`, 20 checks against a fake dispatch, so the loop is proven before a
+   browser is involved. `token.ts` is separate from `relay.ts` because parsing is
+   pure and relay pulls in the fastpath and the CDP controller.*
+7. **Harden `server.ts`** per v6 §13. Independent of everything above.
 
 Steps 1 and 2 are pure refactors and should land as their own commits so that a
 green suite is attributable.
