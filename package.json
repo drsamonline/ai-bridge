@@ -69,7 +69,9 @@
     "package": "npm run build && npm run build:bundle && node scripts/make-vsix.mjs",
     "test:release": "node test/release.cjs",
     "version:bump": "node scripts/bump.mjs",
-    "build:bridge": "node scripts/bundle-bridge.mjs"
+    "build:bridge": "node scripts/bundle-bridge.mjs",
+    "debate": "node scripts/debate-app.mjs",
+    "debate:zip": "node scripts/make-chrome-zip.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.14.10",

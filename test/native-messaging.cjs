@@ -209,6 +209,30 @@ check('hosts: the VS Code panel reads the bridge\'s file rather than keeping a c
   assert.ok(!src.includes('<section'), 'the VS Code host must not embed its own copy of the UI');
 });
 
+/* -------------------------------------------------------- the other surfaces */
+
+check('app: the shell URL is read out of the bridge log, not guessed', () => {
+  const app = require('../scripts/debate-app.mjs');
+  const line = 'served shell: http://127.0.0.1:47615/?nonce=AbC-123_x';
+  assert.equal(app.SHELL_LINE.exec(line)[1], 'http://127.0.0.1:47615/?nonce=AbC-123_x');
+  assert.equal(app.SHELL_LINE.test('listening on /tmp/bridge.sock'), false);
+});
+
+check('app: app mode gets a window, not a browser tab, and no debugging port', () => {
+  const app = require('../scripts/debate-app.mjs');
+  const args = app.appArgs('http://127.0.0.1:1/?nonce=x', '/tmp/profile');
+  assert.ok(args.includes('--app=http://127.0.0.1:1/?nonce=x'), 'app mode is what makes it a window');
+  assert.ok(args.includes('--user-data-dir=/tmp/profile'));
+  // The app window is a client of the bridge; the browser the bridge drives is a
+  // different one, and this must never carry a debugging port.
+  assert.ok(!args.some((a) => a.startsWith('--remote-debugging')), 'the app window must not be drivable');
+});
+
+check('chrome zip: the three files an extension needs are all present', () => {
+  const zip = require('../scripts/make-chrome-zip.mjs');
+  assert.deepEqual(zip.missingFiles(), [], 'the Chrome shell is incomplete — run npm run build');
+});
+
 console.log('');
 console.log(`${results.filter((r) => r.startsWith('PASS')).length}/${results.length} passed`);
 if (failures > 0) {
