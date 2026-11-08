@@ -93,6 +93,13 @@ it is a hole in a page the bridge already serves.
 
 ## Batch 5 — the large one
 
+**Split — `02b2ae4`.** The code-shaped half landed: `payload.ts` (§7 assembly,
+which did not exist) and `liveDispatch.ts` (written and typechecked, never run
+against a page). The browser-shaped half is written down as
+[`LIVE-GATE.md`](LIVE-GATE.md) instead of pretended: live selectors, one fastpath
+template, and the first real session, each with what to run and what success
+looks like.
+
 Everything that needs a real browser. Do not start before batch 3, because the
 payload is where the slice and the context block actually reach a participant.
 
