@@ -40,6 +40,7 @@ import {
 } from '@ai-bridge/shared';
 import { BridgeProcess } from './bridgeProcess';
 import { ChatPanelProvider, type FromPanel } from './chatPanel';
+import { DebatePanelProvider } from './debatePanel';
 import { DecisionStore, RepoService } from './repo/service';
 import { contextWorthIt } from '@ai-bridge/shared';
 import { StateManager } from './state/manager';
@@ -462,6 +463,17 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.registerWebviewViewProvider(ChatPanelProvider.viewType, panel, {
       webviewOptions: { retainContextWhenHidden: true },
     }),
+  );
+
+  // The debate engine's panel — the same HTML the bridge serves (D10). It talks to
+  // the bridge through the client we already have, so the webview never sees a port
+  // or a token and needs no ws:// CSP exception.
+  const debate = new DebatePanelProvider(context.extensionUri, client, (line) => write('warn', line));
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(DebatePanelProvider.viewType, debate, {
+      webviewOptions: { retainContextWhenHidden: true },
+    }),
+    vscode.commands.registerCommand('aiBridge.debate.open', () => debate.reveal()),
   );
 
   const setPanelStatus = (text: string, state: '' | 'ok' | 'busy' = '') => {

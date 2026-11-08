@@ -133,6 +133,9 @@ premise — a served page is enough — is weaker than the spec assumed.
 | **10** | `liveDispatch` integration test against the fixture page | M | **Done.** Real Chromium, real DOM, real CDP: the whole §7 payload read back out of the composer, a settle from the page rather than the debounce fallback, and the two refusal paths |
 | **11** | The panel — one UI, served by B | M | **Done.** `panel.html`, served after the nonce exchange, with the per-host difference isolated to `getToken()` |
 | **12** | The A shell — extension, native messaging, installers | L | **Done, unexercised.** Framing, host entry, MV3 manifest, background relay, per-OS installer. Needs a real Chrome to load the extension — that is the one step I cannot take |
+| **14** | The debate panel inside the VS Code extension | M | **Done.** A second webview view loading the bridge's own panel, relayed over the existing client — the third host for one UI |
+| **15** | Standalone app — a launcher that opens the served panel in app mode | S | Next: the bridge already serves it; this is a window, not a runtime |
+| **16** | Package the Chrome extension as a zip | S | Built and tested; needs an artefact and a load-unpacked guide |
 | **13** | Delta transport (§7) | M-L | **Done.** Each participant is sent a message once and the plan only when its version moved — which, since the planner revises every round, means the plan delta pays off on retries, where it used to re-send everything |
 
 ### The decision that gates batch 12

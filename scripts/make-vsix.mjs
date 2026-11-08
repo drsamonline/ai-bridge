@@ -87,8 +87,18 @@ if (!fs.existsSync(bridgeBundle)) {
   console.error('bridge/dist/bridge.js is missing — run `npm run build:bundle` first');
   process.exit(1);
 }
-fs.mkdirSync(path.join(extStage, 'bridge', 'dist'), { recursive: true });
+fs.mkdirSync(path.join(extStage, 'bridge', 'dist', 'server'), { recursive: true });
 fs.copyFileSync(bridgeBundle, path.join(extStage, 'bridge', 'dist', 'bridge.js'));
+
+// The debate panel is read from disk at runtime, so it has to be in the package.
+// Same failure shape as the bridge entry above: without it the view opens and says
+// the file is missing, which is a worse error than not opening at all.
+const panel = path.join(ROOT, 'bridge', 'dist', 'server', 'panel.html');
+if (!fs.existsSync(panel)) {
+  console.error('bridge/dist/server/panel.html is missing — run `npm run build` first (copy-assets)');
+  process.exit(1);
+}
+fs.copyFileSync(panel, path.join(extStage, 'bridge', 'dist', 'server', 'panel.html'));
 
 // playwright-core stays outside the bridge bundle (it resolves driver files from
 // disk at runtime), so it travels as a real dependency, ~8 MB.

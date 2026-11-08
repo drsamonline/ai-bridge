@@ -189,6 +189,26 @@ check('shell: the host the installer points at has actually been built', () => {
     'build the bridge before installing the host');
 });
 
+/* ----------------------------------------------------------- host parity */
+
+check('hosts: the panel carries a transport for every host, and no host-specific logic', () => {
+  const panel = fs.readFileSync(path.join(ROOT, 'bridge', 'src', 'server', 'panel.html'), 'utf8');
+  assert.ok(panel.includes('inVsCode()'), 'the VS Code transport is missing');
+  assert.ok(panel.includes('inExtension()'), 'the Chrome transport is missing');
+  assert.ok(panel.includes('callSocket('), 'the served-page transport is missing');
+  // One decision point, not three copies of the UI.
+  assert.match(panel, /const call = \(op, args = \{\}\) =>/);
+});
+
+check('hosts: the VS Code panel reads the bridge\'s file rather than keeping a copy', () => {
+  // Four hosts is where a UI forks. VS Code reads bridge/dist/server/panel.html at
+  // runtime, so parity there is structural; Chrome gets a byte-identical copy that
+  // the check above compares; the served page is the source itself.
+  const src = fs.readFileSync(path.join(ROOT, 'extension', 'src', 'debatePanel.ts'), 'utf8');
+  assert.ok(src.includes("'bridge', 'dist', 'server', 'panel.html'"), 'the VS Code host should load the built panel');
+  assert.ok(!src.includes('<section'), 'the VS Code host must not embed its own copy of the UI');
+});
+
 console.log('');
 console.log(`${results.filter((r) => r.startsWith('PASS')).length}/${results.length} passed`);
 if (failures > 0) {

@@ -232,6 +232,11 @@
       {
         "command": "aiBridge.diagnose",
         "title": "AI Bridge: Diagnose"
+      },
+      {
+        "command": "aiBridge.debate.open",
+        "title": "AI Bridge: Open Debate",
+        "category": "AI Bridge"
       }
     ],
     "configuration": {
@@ -571,6 +576,12 @@
           "name": "Chat",
           "type": "webview",
           "contextualTitle": "AI Bridge Chat"
+        },
+        {
+          "id": "aiBridge.debateView",
+          "name": "Debate",
+          "type": "webview",
+          "contextualTitle": "Multi-AI Debate"
         }
       ]
     },
