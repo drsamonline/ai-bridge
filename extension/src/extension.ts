@@ -41,7 +41,7 @@ import {
 import { BridgeProcess } from './bridgeProcess';
 import { ChatPanelProvider, type FromPanel } from './chatPanel';
 import { DecisionStore, RepoService } from './repo/service';
-import { contextWorthIt } from './repo/relevance';
+import { contextWorthIt } from '@ai-bridge/shared';
 import { StateManager } from './state/manager';
 import { StateStore } from './state/store';
 import { T1Host } from './state/workerHost';

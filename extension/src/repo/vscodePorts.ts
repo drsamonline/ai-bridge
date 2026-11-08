@@ -9,8 +9,8 @@
 import * as vscode from 'vscode';
 import { execFile } from 'node:child_process';
 import * as crypto from 'node:crypto';
-import type { ApplyPort, DiffPort, FileEdit, FsPort, FileStat, SearchHit } from './ports';
-import { isEditablePath } from './ports';
+import type { ApplyPort, DiffPort, FileEdit, FsPort, FileStat, SearchHit } from '@ai-bridge/shared';
+import { isEditablePath } from '@ai-bridge/shared';
 
 const decoder = new TextDecoder('utf-8');
 const encoder = new TextEncoder();

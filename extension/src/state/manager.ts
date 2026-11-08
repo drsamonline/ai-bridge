@@ -16,7 +16,7 @@ import type { T1Host } from './workerHost';
 import { buildBoot, verifyAck, type AckCheck, type BootOptions, type BootResult } from './boot';
 import { HeuristicT2, mergePatch, type T2Backend, type T2Turn } from './t2';
 import { rescanRepo, type RescanResult } from './rescan';
-import type { FsPort } from '../repo/ports';
+import type { FsPort } from '@ai-bridge/shared';
 
 export interface ManagerOptions {
   store: StateStore;

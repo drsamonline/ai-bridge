@@ -13,7 +13,7 @@
 import * as vscode from 'vscode';
 import { EditApplier, type HeldEdit, type LockedDecisionLite, type Plan } from './applier';
 import { parseProposal, summarise, type Proposal } from './proposal';
-import { RepoReader, type RepoBundle } from './reader';
+import { RepoReader, type RepoBundle } from '@ai-bridge/shared';
 import { createApplyPort, createDiffPort, createFsPort } from './vscodePorts';
 
 export interface ProposalHunk {

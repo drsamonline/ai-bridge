@@ -12,7 +12,7 @@
  */
 
 import * as crypto from 'node:crypto';
-import type { ApplyPort, FileEdit, FsPort } from './ports';
+import type { ApplyPort, FileEdit, FsPort } from '@ai-bridge/shared';
 import type { Proposal } from './proposal';
 
 export interface LockedDecisionLite {

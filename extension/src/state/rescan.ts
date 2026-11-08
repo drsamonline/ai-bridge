@@ -14,7 +14,7 @@
 
 import * as crypto from 'node:crypto';
 import type { ProjectState } from '@ai-bridge/shared';
-import type { FsPort } from '../repo/ports';
+import type { FsPort } from '@ai-bridge/shared';
 
 export interface RescanResult {
   tookMs: number;
