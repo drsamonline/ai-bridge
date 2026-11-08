@@ -221,7 +221,16 @@ export class SessionManager {
 
   abort(id: string, reason?: string): boolean {
     const runner = this.runners.get(id);
-    if (!runner) return false;
+    if (!runner) {
+      // A session created but never run still needs to be closed, or it sits in
+      // INITIALIZING until the startup sweep decides it was interrupted — which
+      // is a lie about what happened.
+      const record = loadSession(this.deps.root, id);
+      if (!record) return false;
+      if (record.state === 'ABORTED' || record.state === 'HANDED_OFF') return false;
+      this.setState(id, 'ABORTED', reason ?? 'aborted before it ran');
+      return true;
+    }
     const ok = runner.abort(reason);
     if (ok) {
       // Leases are released and the tabs unpinned: the session no longer owns

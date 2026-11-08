@@ -16,6 +16,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 const { SessionManager } = require('../bridge/dist/runtime/sessions.js');
+const { BridgeRuntime } = require('../bridge/dist/runtime/index.js');
 const { sessionDir } = require('../bridge/dist/runtime/session.js');
 
 const results = [];
@@ -165,6 +166,38 @@ const agreeing = async (req) => ({
     assert.equal(await m.resume('nope'), null);
     assert.equal(m.bundle('nope').ok, false);
     assert.equal(m.abort('nope'), false);
+  });
+
+  await checkAsync('ctl.session.*: the ops reach the manager over the control plane', async () => {
+    const root = tempRoot();
+    const runtime = new BridgeRuntime({
+      log: { info() {}, warn() {}, error() {}, debug() {}, child() { return this; } },
+      sessionsRoot: root,
+    });
+
+    const created = await runtime.control({ op: 'ctl.session.create', roster: { participants: roster(), ramCapBytes: 2000 * 1024 * 1024 } });
+    assert.equal(created.ok, true, created.detail);
+
+    const state = await runtime.control({ op: 'ctl.session.state', id: created.record.id });
+    assert.equal(state.id, created.record.id);
+    assert.equal(state.state, 'INITIALIZING');
+
+    const listed = await runtime.control({ op: 'ctl.session.list' });
+    assert.equal(listed.length, 1, 'the session must be discoverable, not just addressable');
+
+    // Bundle before consensus is refused, and says so rather than throwing.
+    const refused = await runtime.control({ op: 'ctl.session.bundle', id: created.record.id });
+    assert.equal(refused.ok, false);
+
+    // A session that was created and never run must still close, or it sits in
+    // INITIALIZING until the startup sweep mislabels it as interrupted.
+    const aborted = await runtime.control({ op: 'ctl.session.abort', id: created.record.id, reason: 'test' });
+    assert.equal(aborted.ok, true);
+    const after = await runtime.control({ op: 'ctl.session.state', id: created.record.id });
+    assert.equal(after.state, 'ABORTED');
+    assert.equal(after.reason, 'test');
+
+    await runtime.stop();
   });
 
   await checkAsync('manager: startup reconstructs and collects', async () => {
