@@ -145,6 +145,14 @@ export type ControlMsg =
       port?: number;
       headless?: boolean;
     }
+  | { op: 'ctl.session.create'; roster: unknown; repoRoot?: string }
+  | { op: 'ctl.session.state'; id: string }
+  | { op: 'ctl.session.list' }
+  | { op: 'ctl.session.run'; id: string }
+  | { op: 'ctl.session.resume'; id: string }
+  | { op: 'ctl.session.bundle'; id: string }
+  | { op: 'ctl.session.handoff'; id: string }
+  | { op: 'ctl.session.abort'; id: string; reason?: string }
   | { op: 'ctl.detach' }
   | { op: 'ctl.status' }
   | { op: 'ctl.ram' }

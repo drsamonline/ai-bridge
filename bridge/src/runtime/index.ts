@@ -19,7 +19,9 @@ import type {
   RamLevel,
 } from '@ai-bridge/shared';
 import { CdpController } from '../cdp/controller';
+import * as path from 'node:path';
 import { Relay, type SwitchRecord } from './relay';
+import { SessionManager } from './sessions';
 import { candidateBrowsers, detectBrowserPath, launchBrowser } from '../cdp/launch';
 import { detectLocalModels } from '../api/local';
 import { DEFAULT_PORTS } from '../cdp/discovery';
@@ -77,6 +79,8 @@ export interface RuntimeOptions {
    * without depending on undici's WASM support.
    */
   apiFetchImpl?: FetchLike;
+  /** Where session records live. Defaults to $AI_BRIDGE_HOME/.ai-bridge. */
+  sessionsRoot?: string;
 }
 
 export class BridgeRuntime {
@@ -120,6 +124,8 @@ export class BridgeRuntime {
   readonly bus = new EventEmitter();
   /** Dispatch and observation, split out in step 2 of the runtime split. */
   private readonly relay: Relay;
+  /** Session lifecycle: create, run, resume, bundle, hand off. */
+  readonly sessions: SessionManager;
 
   constructor(private readonly opts: RuntimeOptions) {
     const log = opts.log;
@@ -182,6 +188,14 @@ export class BridgeRuntime {
       rungs: this.rungs,
       router: this.router,
       fastFetch: this.fastFetch,
+    });
+
+    this.sessions = new SessionManager({
+      root: opts.sessionsRoot ?? path.join(process.env.AI_BRIDGE_HOME ?? process.cwd(), '.ai-bridge'),
+      controller: this.controller,
+      adapters: this.adapters,
+      relay: this.relay,
+      log: log.child('session'),
     });
 
     this.wire();
@@ -975,6 +989,31 @@ export class BridgeRuntime {
       }
       case 'ctl.prompt':
         return this.prompt(msg);
+      case 'ctl.session.create': {
+        const out = await this.sessions.create(msg.roster as never);
+        return out;
+      }
+      case 'ctl.session.state': {
+        return this.sessions.state(msg.id);
+      }
+      case 'ctl.session.list': {
+        return this.sessions.list();
+      }
+      case 'ctl.session.run': {
+        return this.sessions.run(msg.id);
+      }
+      case 'ctl.session.resume': {
+        return this.sessions.resume(msg.id);
+      }
+      case 'ctl.session.bundle': {
+        return this.sessions.bundle(msg.id);
+      }
+      case 'ctl.session.handoff': {
+        return { ok: this.sessions.confirmHandoff(msg.id) };
+      }
+      case 'ctl.session.abort': {
+        return { ok: this.sessions.abort(msg.id, msg.reason) };
+      }
       case 'ctl.config': {
         if (typeof msg.ramCapBytes === 'number') {
           this.monitor.setCap(msg.ramCapBytes);
