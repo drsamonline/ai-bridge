@@ -1,6 +1,6 @@
 # Batch 0.2 — CDP attach acceptance evidence
 
-Generated: 2026-10-30T09:35:30.647Z
+Generated: 2026-11-09T20:28:02.454Z
 Node v20.20.2 · fixture: /usr/local/bin/chromium-headless-shell --headless=new --remote-debugging-port=9222
 
 The harness launches the browser as a stand-in for the user's already-open
@@ -52,65 +52,65 @@ PASS  no launch() call anywhere in bridge/src (attach-only policy)
 
 Result: 39/39 passed.
 
-Memory metric used: **procfs-rss** (6 processes, 1432 MB). This kernel exposes neither `smaps_rollup` nor shared-page counts, so the number is an RSS upper bound. The watchdog checks below drive the cap RELATIVE to the measured baseline, so they test the threshold logic, not the absolute figure.
+Memory metric used: **procfs-rss** (6 processes, 1505 MB). This kernel exposes neither `smaps_rollup` nor shared-page counts, so the number is an RSS upper bound. The watchdog checks below drive the cap RELATIVE to the measured baseline, so they test the threshold logic, not the absolute figure.
 
 ## Bridge log (tail)
 
 ```
-2026-10-30T09:35:03.588Z INFO  [bridge] lock file written {"path":"<tmp-home>/.ai-bridge/lock.json","mode":"0600","port":47802}
-2026-10-30T09:35:03.589Z INFO  [bridge] bridge ready {"address":"ws://127.0.0.1:47802","hint":"waiting for { op: \"attach\" }"}
-2026-10-30T09:35:03.590Z INFO  [bridge:watchdog] watchdog armed {"warn":"80%","block":"100%"}
-2026-10-30T09:35:03.592Z INFO  [bridge:ram] RAM monitor started {"pollMs":400,"capMB":8000}
-AI_BRIDGE_READY {"port":47802,"pid":3256,"lock":"<tmp-home>/.ai-bridge/lock.json"}
-2026-10-30T09:35:03.647Z INFO  [bridge] client connected 127.0.0.1:23801 {"clients":1}
-2026-10-30T09:35:03.651Z INFO  [bridge] handshake OK — token accepted {"remote":"127.0.0.1:23801","pid":3256,"protocol":1,"fingerprint":"52ea8d377f3f"}
-2026-10-30T09:35:03.660Z INFO  [bridge:cdp] discovering CDP endpoints {"ports":[9222]}
-2026-10-30T09:35:03.674Z INFO  [bridge:cdp] CDP endpoints found {"candidates":["Chrome@9222"]}
-2026-10-30T09:35:03.674Z INFO  [bridge:cdp] attaching via connectOverCDP to Chrome on 127.0.0.1:9222 {"version":"HeadlessChrome/153.0.8010.12","protocol":"1.3"}
-2026-10-30T09:35:03.905Z INFO  [bridge:cdp] context adopted {"contexts":1,"reused":true,"pagesInContext":2}
-2026-10-30T09:35:03.912Z INFO  [bridge:cdp] attached {"name":"Chrome","version":"HeadlessChrome/153.0.8010.12","port":9222,"contexts":1}
-2026-10-30T09:35:04.015Z WARN  [bridge:ram] RSS metric: PSS and shared-page accounting unavailable on this kernel; this is an RSS upper bound (shared pages counted per process)
-2026-10-30T09:35:04.309Z INFO  [bridge:cdp] tab opened {"id":"tab1","url":"about:blank","tabs":1}
-2026-10-30T09:35:04.899Z INFO  [bridge:cdp] tab opened {"id":"tab2","url":"data:text/html,<h1>second</h1>","tabs":2}
-2026-10-30T09:35:04.924Z INFO  [bridge:cdp] tab closed {"id":"tab2","remaining":1}
-2026-10-30T09:35:05.016Z INFO  [bridge:cdp] tab closed {"id":"tab1","remaining":0}
-2026-10-30T09:35:05.516Z INFO  [bridge:cdp] tab opened {"id":"tab3","url":"about:blank","tabs":1}
-2026-10-30T09:35:05.518Z INFO  [bridge:cdp] recycled active tab {"reason":"turns>=50","closed":"tab1","opened":"tab3"}
-2026-10-30T09:35:05.598Z INFO  [bridge:cdp] tab closed {"id":"tab3","remaining":0}
-2026-10-30T09:35:06.042Z INFO  [bridge:cdp] tab opened {"id":"tab4","url":"about:blank","tabs":1}
-2026-10-30T09:35:06.044Z INFO  [bridge:cdp] recycled active tab {"reason":"user","closed":"tab3","opened":"tab4"}
-2026-10-30T09:35:26.638Z INFO  [bridge] ram cap updated {"capMB":8000}
-2026-10-30T09:35:26.666Z INFO  [bridge] ram cap updated {"capMB":1684}
-2026-10-30T09:35:26.839Z WARN  [bridge:watchdog] RAM at 80% — evicting idle tabs and collecting garbage {"usedMB":1431,"capMB":1684,"percent":85}
-2026-10-30T09:35:26.889Z INFO  [bridge:cdp] gc requested {"pages":1,"ok":true}
-2026-10-30T09:35:27.238Z WARN  [bridge:watchdog] still above 80% after eviction — recycling active tab
-2026-10-30T09:35:27.248Z INFO  [bridge:cdp] tab closed {"id":"tab4","remaining":0}
-2026-10-30T09:35:27.616Z INFO  [bridge:cdp] tab opened {"id":"tab5","url":"about:blank","tabs":1}
-2026-10-30T09:35:27.617Z INFO  [bridge:cdp] recycled active tab {"reason":"ram>=80%","closed":"tab4","opened":"tab5"}
-2026-10-30T09:35:27.715Z INFO  [bridge] ram cap updated {"capMB":1288}
-2026-10-30T09:35:28.050Z ERROR [bridge:watchdog] RAM cap reached — requests blocked {"usedMB":1431,"capMB":1288,"percent":111.1}
-2026-10-30T09:35:28.122Z INFO  [bridge:cdp] gc requested {"pages":1,"ok":true}
-2026-10-30T09:35:28.125Z WARN  [bridge] op ctl.tab.open failed: ERAMBLOCK: RAM cap reached — close a tab or raise the cap before opening another
-2026-10-30T09:35:28.127Z INFO  [bridge] ram cap updated {"capMB":2863}
-2026-10-30T09:35:28.456Z INFO  [bridge:watchdog] RAM back under the warn line — unblocked {"percent":50}
-2026-10-30T09:35:28.608Z INFO  [bridge:cdp] tab closed {"id":"tab5","remaining":0}
-2026-10-30T09:35:28.688Z DEBUG [bridge:cdp] CDP session closed by detach()
-2026-10-30T09:35:28.707Z INFO  [bridge:cdp] detached {"closedTabs":1,"browserStillRunning":true}
-2026-10-30T09:35:30.275Z INFO  [bridge:cdp] discovering CDP endpoints {"ports":[9222]}
-2026-10-30T09:35:30.285Z WARN  [bridge:cdp] no CDP endpoint answered {"ports":[9222]}
-2026-10-30T09:35:30.289Z WARN  [bridge] op ctl.attach failed: ENOCDP: nothing listening on 127.0.0.1:9222. Start Chrome/Edge with --remote-debugging-port=9222 and stay logged in. The bridge attaches to an existing browser and never launches one.
-2026-10-30T09:35:30.620Z INFO  [bridge] shutting down (SIGTERM)
-2026-10-30T09:35:30.622Z INFO  [bridge] server closed
-2026-10-30T09:35:30.624Z INFO  [bridge] lock file removed
+2026-11-09T20:27:37.075Z INFO  [bridge:watchdog] watchdog armed {"warn":"80%","block":"100%"}
+2026-11-09T20:27:37.076Z INFO  [bridge:ram] RAM monitor started {"pollMs":400,"capMB":8000}
+AI_BRIDGE_READY {"port":47802,"pid":214,"lock":"<tmp-home>/.ai-bridge/lock.json"}
+2026-11-09T20:27:37.168Z INFO  [bridge] client connected undefined:undefined {"clients":1}
+2026-11-09T20:27:37.171Z INFO  [bridge] handshake OK — socket peer {"remote":"undefined:undefined","pid":214,"protocol":1,"fingerprint":""}
+2026-11-09T20:27:37.177Z INFO  [bridge:cdp] discovering CDP endpoints {"ports":[9222]}
+2026-11-09T20:27:37.188Z INFO  [bridge:cdp] CDP endpoints found {"candidates":["Chrome@9222"]}
+2026-11-09T20:27:37.189Z INFO  [bridge:cdp] attaching via connectOverCDP to Chrome on 127.0.0.1:9222 {"version":"HeadlessChrome/156.0.8078.4","protocol":"1.3"}
+2026-11-09T20:27:37.351Z INFO  [bridge:cdp] context adopted {"contexts":1,"reused":true,"pagesInContext":2}
+2026-11-09T20:27:37.357Z INFO  [bridge:cdp] attached {"name":"Chrome","version":"HeadlessChrome/156.0.8078.4","port":9222,"contexts":1}
+2026-11-09T20:27:37.534Z WARN  [bridge:ram] RSS metric: PSS and shared-page accounting unavailable on this kernel; this is an RSS upper bound (shared pages counted per process)
+2026-11-09T20:27:37.724Z INFO  [bridge:cdp] tab opened {"id":"tab1","url":"about:blank","tabs":1}
+2026-11-09T20:27:38.136Z INFO  [bridge:cdp] tab opened {"id":"tab2","url":"data:text/html,<h1>second</h1>","tabs":2}
+2026-11-09T20:27:38.222Z INFO  [bridge:cdp] tab closed {"id":"tab2","remaining":1}
+2026-11-09T20:27:38.246Z INFO  [bridge:cdp] tab closed {"id":"tab1","remaining":0}
+2026-11-09T20:27:38.636Z INFO  [bridge:cdp] tab opened {"id":"tab3","url":"about:blank","tabs":1}
+2026-11-09T20:27:38.637Z INFO  [bridge:cdp] recycled active tab {"reason":"turns>=50","closed":"tab1","opened":"tab3"}
+2026-11-09T20:27:38.652Z INFO  [bridge:cdp] tab closed {"id":"tab3","remaining":0}
+2026-11-09T20:27:39.030Z INFO  [bridge:cdp] tab opened {"id":"tab4","url":"about:blank","tabs":1}
+2026-11-09T20:27:39.031Z INFO  [bridge:cdp] recycled active tab {"reason":"user","closed":"tab3","opened":"tab4"}
+2026-11-09T20:27:59.401Z INFO  [bridge] ram cap updated {"capMB":8000}
+2026-11-09T20:27:59.413Z INFO  [bridge] ram cap updated {"capMB":1770}
+2026-11-09T20:27:59.552Z WARN  [bridge:watchdog] RAM at 80% — evicting idle tabs and collecting garbage {"usedMB":1504,"capMB":1770,"percent":85}
+2026-11-09T20:27:59.580Z INFO  [bridge:cdp] gc requested {"pages":1,"ok":true}
+2026-11-09T20:27:59.953Z WARN  [bridge:watchdog] still above 80% after eviction — recycling active tab
+2026-11-09T20:27:59.960Z INFO  [bridge:cdp] tab closed {"id":"tab4","remaining":0}
+2026-11-09T20:28:00.273Z INFO  [bridge:cdp] tab opened {"id":"tab5","url":"about:blank","tabs":1}
+2026-11-09T20:28:00.274Z INFO  [bridge:cdp] recycled active tab {"reason":"ram>=80%","closed":"tab4","opened":"tab5"}
+2026-11-09T20:28:00.330Z INFO  [bridge] ram cap updated {"capMB":1354}
+2026-11-09T20:28:00.362Z ERROR [bridge:watchdog] RAM cap reached — requests blocked {"usedMB":1505,"capMB":1354,"percent":111.1}
+2026-11-09T20:28:00.400Z INFO  [bridge:cdp] gc requested {"pages":1,"ok":true}
+2026-11-09T20:28:00.433Z WARN  [bridge] op ctl.tab.open failed: ERAMBLOCK: RAM cap reached — close a tab or raise the cap before opening another
+2026-11-09T20:28:00.435Z INFO  [bridge] ram cap updated {"capMB":3009}
+2026-11-09T20:28:00.761Z INFO  [bridge:watchdog] RAM back under the warn line — unblocked {"percent":50}
+2026-11-09T20:28:00.856Z INFO  [bridge:cdp] tab closed {"id":"tab5","remaining":0}
+2026-11-09T20:28:00.868Z DEBUG [bridge:cdp] CDP session closed by detach()
+2026-11-09T20:28:00.879Z INFO  [bridge:cdp] detached {"closedTabs":1,"browserStillRunning":true}
+2026-11-09T20:28:02.350Z INFO  [bridge:cdp] discovering CDP endpoints {"ports":[9222]}
+2026-11-09T20:28:02.353Z WARN  [bridge:cdp] no CDP endpoint answered {"ports":[9222]}
+2026-11-09T20:28:02.355Z WARN  [bridge] op ctl.attach failed: ENOCDP: nothing listening on 127.0.0.1:9222. Chrome 136+ ignores --remote-debugging-port on the default profile, so the flag alone will not open a port. Either start Chrome with BOTH switches — --remote-debugging-port=9222 --user-data-dir=<a folder of its own> — and sign in there once, or set aiBridge.browser.mode to "launch" and run AI Bridge: Launch Browser, which passes both.
+2026-11-09T20:28:02.436Z INFO  [bridge] shutting down (SIGTERM)
+2026-11-09T20:28:02.439Z INFO  [bridge] client disconnected undefined:undefined {"code":1000,"reason":"client-close","requests":33,"clients":0}
+2026-11-09T20:28:02.439Z INFO  [bridge] server closed
+2026-11-09T20:28:02.441Z INFO  [bridge] lock file removed
+2026-11-09T20:28:02.441Z INFO  [bridge] socket removed
 ```
 
 ## Extension-side client log
 
 ```
-INFO  lock file read: <tmp-home>/.ai-bridge/lock.json (mode 0600) pid=3256 port=47802
-INFO  dialling ws://127.0.0.1:47802
+INFO  lock file read: <tmp-home>/.ai-bridge/lock.json (mode 0600) pid=214 port=47802
+INFO  dialling <tmp-home>/.ai-bridge/bridge.sock
 INFO  socket open — sending { op: "attach" }
-INFO  handshake OK — pid=3256 v0.1.0 protocol=v1 token=52ea8d377f3f caps=[attach,recycle,navigate,send,observe,health,ctl.*]
+INFO  handshake OK — pid=214 v0.1.0 protocol=v1 token= caps=[attach,recycle,navigate,send,observe,health,ctl.*]
 INFO  <- attached
 INFO  <- tab.opened
 INFO  <- tab.opened
