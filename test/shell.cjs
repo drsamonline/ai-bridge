@@ -67,7 +67,9 @@ const watchdog = setTimeout(() => {
 (async () => {
   console.log('');
 
-  const home = fs.mkdtempSync('/tmp/abs-shell-');
+  // os.tmpdir(), not '/tmp': Windows has no /tmp, and the suite failed there
+  // with ENOENT: mkdtemp '/tmp/abs-shell-XXXXXX' before it ever started.
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'abs-shell-'));
   process.env.AI_BRIDGE_HOME = home;
   // `main.ts` creates this before starting the server; calling startBridgeServer
   // directly means the socket's directory does not exist yet, and listen() reports
