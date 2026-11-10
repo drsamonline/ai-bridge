@@ -1,6 +1,6 @@
 # Batch 3.2 — T1 compressor (opt-in local model)
 
-Generated: 2026-10-30T09:09:06.216Z
+Generated: 2026-11-09T20:28:40.944Z
 
 Acceptance: **Identifiers preserved; low-end stays T0.**
 

@@ -1,6 +1,6 @@
 # Batch 3.1 — T0 compressor
 
-Generated: 2026-10-30T04:18:44.038Z
+Generated: 2026-11-09T20:28:40.142Z
 
 Acceptance: **100→≤70 tokens, code untouched, hash cache.**
 

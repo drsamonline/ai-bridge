@@ -23,16 +23,22 @@ import * as path from 'node:path';
 
 export const HOST_NAME = 'com.drsamonline.ai_bridge_debate';
 
-/** Where Chrome looks for the host manifest, per platform. */
+/** Where Chrome looks for the host manifest, per platform.
+ *
+ * The separators follow the `platform` argument, not the host running this: a
+ * Linux manifest path built on Windows came out as `\\home\\x\\.config\\...`, which
+ * is not a path any Linux Chrome would read. `path.join` uses the host's
+ * separators, so each branch names the one it means.
+ */
 export function manifestPath(platform, home) {
   if (platform === 'win32') {
     // Not a file path Chrome reads: the key's default value points at the JSON.
     return null;
   }
   if (platform === 'darwin') {
-    return path.join(home, 'Library', 'Application Support', 'Google', 'Chrome', 'NativeMessagingHosts', `${HOST_NAME}.json`);
+    return path.posix.join(home, 'Library', 'Application Support', 'Google', 'Chrome', 'NativeMessagingHosts', `${HOST_NAME}.json`);
   }
-  return path.join(home, '.config', 'google-chrome', 'NativeMessagingHosts', `${HOST_NAME}.json`);
+  return path.posix.join(home, '.config', 'google-chrome', 'NativeMessagingHosts', `${HOST_NAME}.json`);
 }
 
 /** The registry command Windows needs, because a file is not enough there. */
@@ -58,7 +64,10 @@ export function buildManifest({ extensionId, hostPath }) {
 
 /** Where the JSON has to live on Windows, since the registry points at it. */
 export function windowsManifestFile(home) {
-  return path.join(home, 'AppData', 'Local', 'ai-bridge', 'native-messaging', `${HOST_NAME}.json`);
+  // Same reason in the other direction: this path is handed to `reg add`, and a
+  // forward-slash path there is read by Windows but not by everyone who inspects
+  // the registry afterwards.
+  return path.win32.join(home, 'AppData', 'Local', 'ai-bridge', 'native-messaging', `${HOST_NAME}.json`);
 }
 
 function main(argv) {

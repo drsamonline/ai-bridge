@@ -1,6 +1,6 @@
 # Batch 7.2 — contract tests + breakage report
 
-Generated: 2026-10-30T09:36:06.269Z
+Generated: 2026-11-09T20:28:39.422Z
 
 Acceptance: **CI green; report JSON has no chat content.**
 
@@ -36,11 +36,13 @@ PASS  diagnostics describe the page without reading its text
 PASS  a report built from the live page leaks no conversation
 PASS  a CI workflow exists
 PASS  CI runs the full suite
+PASS  the suite runner takes its list from test:all, not a subset
+PASS  no child process is spawned with a console window
 PASS  CI installs a browser for the CDP suites
 PASS  CI covers every test file in the repo
 ```
 
-Result: 31/31 passed.
+Result: 33/33 passed.
 
 ## The adapter contract, per provider
 
@@ -55,7 +57,7 @@ Result: 31/31 passed.
 ```json
 {
   "schema": 1,
-  "when": "2026-10-30T09:36:05.644Z",
+  "when": "2026-11-09T20:28:39.106Z",
   "adapter": {
     "id": "claude",
     "host": "unknown",

@@ -131,6 +131,35 @@
    * the unix socket. So this is a *relay*, not a credential.
    */
   const inExtension = () => typeof chrome !== 'undefined' && !!chrome.runtime?.id;
+  const inVsCode = () => typeof acquireVsCodeApi === 'function';
+
+  // VS Code: the webview posts, the extension forwards to the bridge over its own
+  // client. Same relay shape as the Chrome background worker.
+  const vscodeApi = inVsCode() ? acquireVsCodeApi() : null;
+  if (vscodeApi) {
+    window.addEventListener('message', (event) => {
+      const m = event.data;
+      if (!m || m.type !== 'ai-bridge:reply') return;
+      const slot = pending.get(m.id);
+      if (!slot) return;
+      pending.delete(m.id);
+      m.error ? slot.reject(new Error(m.error)) : slot.resolve(m.result);
+    });
+  }
+
+  function callVsCode(op, args) {
+    return new Promise((resolve, reject) => {
+      const id = ++seq;
+      pending.set(id, { resolve, reject });
+      vscodeApi.postMessage({ type: 'ai-bridge:call', id, op, args });
+      setTimeout(() => {
+        if (pending.has(id)) {
+          pending.delete(id);
+          reject(new Error(`${op} timed out`));
+        }
+      }, 30000);
+    });
+  }
 
   function callExtension(op, args) {
     return new Promise((resolve, reject) => {
@@ -157,7 +186,8 @@
     });
   }
 
-  const call = (op, args = {}) => (inExtension() ? callExtension(op, args) : callSocket(op, args));
+  const call = (op, args = {}) =>
+    (inVsCode() ? callVsCode(op, args) : inExtension() ? callExtension(op, args) : callSocket(op, args));
 
   async function getToken() {
     const res = await fetch('/auth', {
@@ -170,6 +200,12 @@
   }
 
   async function connect() {
+    if (inVsCode()) {
+      setDot('live', 'vs code');
+      log('connected through the extension');
+      refresh();
+      return;
+    }
     if (inExtension()) {
       setDot('live', 'extension');
       log('connected through the extension relay');
