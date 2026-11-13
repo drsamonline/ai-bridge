@@ -44,7 +44,13 @@ jobs:
           # the moment the landing page was redesigned without it - so the new page was
           # never published. Assert the shape instead: at least one screenshot, and the
           # loop below proves every one it names exists inside docs/.
-          shots=$(grep -oE 'src="screenshots/[^"]+\.png"' docs/index.html | wc -l)
+          # A cache-buster is part of the URL, not part of the filename: the page
+          # carries src="screenshots/chat-panel.png?v=20261108", and a pattern that
+          # demanded `\.png"` right after the name counted ZERO of the four
+          # screenshots on the page and failed with "shows no product screenshot"
+          # on every push since the ?v= was added. The loop below already strips
+          # the query (clean="${asset%%\?*}"); this one now does too.
+          shots=$(grep -oE 'src="screenshots/[^"?]+\.png(\?[^"]*)?"' docs/index.html | wc -l)
           test "$shots" -ge 1 || (echo "the landing page shows no product screenshot" && exit 1)
           # `docs/` IS the site root, so every relative asset the page references
           # must exist inside it. A path that escapes the root — ../extension/...
