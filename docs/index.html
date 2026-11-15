@@ -165,6 +165,11 @@
   footer a { color: var(--muted); } footer a:hover { color: var(--accent); }
   .stamp { margin-left: auto; font-family: var(--mono); font-size: 10.5px; letter-spacing: .06em; }
 </style>
+<style>
+/* ---- a11y: the green is light in the dark theme --------------------------- */
+[data-theme="dark"] a.btn:not(.ghost){color:#0b1020!important}   /* 2.12 -> 8.93 on #2ecc5a */
+[data-theme="dark"] a.btn.ghost{color:#e8f0ea!important}         /* the ghost sits on the page */
+</style>
 </head>
 <body>
 
