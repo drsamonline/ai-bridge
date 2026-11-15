@@ -44,7 +44,13 @@ jobs:
           # the moment the landing page was redesigned without it - so the new page was
           # never published. Assert the shape instead: at least one screenshot, and the
           # loop below proves every one it names exists inside docs/.
-          shots=$(grep -oE 'src="screenshots/[^"]+\.png"' docs/index.html | wc -l)
+          # A cache-buster (`chat-panel.png?v=20261108`) is not a different file: the
+          # pattern used to end at `.png"`, so the moment the page gained `?v=` on its
+          # screenshots this counted ZERO and the deploy went red with "no product
+          # screenshot" while the page showed four of them (run 43736199695). The
+          # asset loop below already strips the query with `${asset%%\?*}`; this
+          # pattern now allows the same suffix instead of forbidding it.
+          shots=$(grep -oE 'src="screenshots/[^"]+\.png(\?[^"]*)?"' docs/index.html | wc -l)
           test "$shots" -ge 1 || (echo "the landing page shows no product screenshot" && exit 1)
           # `docs/` IS the site root, so every relative asset the page references
           # must exist inside it. A path that escapes the root — ../extension/...
